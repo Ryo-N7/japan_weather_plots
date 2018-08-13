@@ -1,0 +1,110 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "August 13, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 
+
+
+
+heatwave plots: inspire from uribo's animation gifs   JMA Stats pkg
+- japan times article reference
+- rise of japanese men using parasols, ignore stigma < health is more important!
+- fill map
+- joyplot
+- thermometer with highest temperature of the day/week/month?
+
+prefecture flag map >>> download img use world cup shiny webscrape method
+
+
+
+
+
+```{r}
+library(magrittr)
+library(jpndistrict)
+library(sf)
+library(ggimage)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(ggpomological)
+library(scales)
+library(rvest)
+library(stringr)
+library(gganimate)
+```
+
+
+```{r}
+sf_ja <- 1:47 %>% 
+    map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
+    reduce(rbind) %>% 
+    st_simplify(dTolerance = 0.01)
+```
+
+
+# simple implementation with each prefecture and a temperature (by day, hour, week, watever)
+
+```{r}
+glimpse(sf_ja)
+
+set.seed(8)
+
+ja_weather_df <- sf_ja %>% 
+  mutate(dayone = rep(sample(x = 24:38, size = 47, replace = TRUE)),
+         daytwo = rep(sample(x = 24:38, size = 47, replace = TRUE)),
+         daythree = rep(sample(x = 24:38, size = 47, replace = TRUE))) %>% glimpse()
+
+ja_weather_df_fin <- ja_weather_df %>% 
+  gather(key = "day", value = "temperature", -jis_code, -prefecture, -geometry)
+
+
+
+ja_weather_df_fin %>% 
+  ggplot() +
+  geom_sf(aes(fill = temperature)) +
+  transition_manual(frames = day)
+
+```
+
+
+
+
+
+
+
+
+Hex map
+
+```{r}
+
+```
+
+
+
+
+geofacet
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
