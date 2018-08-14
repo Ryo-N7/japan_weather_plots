@@ -23,6 +23,9 @@ heatwave plots: inspire from uribo's animation gifs   JMA Stats pkg
 prefecture flag map >>> download img use world cup shiny webscrape method
 
 
+```{r}
+source("scripts/source_encoding_932.r")
+```
 
 
 
@@ -40,6 +43,7 @@ library(scales)
 library(rvest)
 library(stringr)
 library(gganimate)
+library(polite)
 ```
 
 
@@ -71,12 +75,28 @@ ja_weather_df_fin <- ja_weather_df %>%
 ja_weather_df_fin %>% 
   ggplot() +
   geom_sf(aes(fill = temperature)) +
+  scale_fill_gradientn(colours = jmastats:::jma_pal(
+    palette = "relative", .attribute = FALSE)[5:1],
+                            labels = c("35~", "30~35", "25~30", "20~25",
+                                       "15~20"),
+                            breaks = c(35, 30, 25, 20, 15),
+                            limits = c(15, 37)) +
   transition_manual(frames = day)
 
 ```
 
 
 
+```{r}
+library(ggridges)
+library(jmastats)
+
+ja_weather_df_fin %>% 
+  ggplot(aes(x = temperature, y = day, fill = ..x..)) +
+  geom_density_ridges_gradient() +
+  scale_fill_jma_absolute(type = "temperature")
+
+```
 
 
 
@@ -100,10 +120,80 @@ geofacet
 
 
 
+temperature maps >>> airport weather stations
+
+
+- map() across years of summer months
+- combine/compare
+- calculate humidex like before as well!
+
+```{r}
+library(riem)
+riem_stations_df <- riem_stations(network = "JP__ASOS")
+
+session <- bow("https://en.wikipedia.org/wiki/List_of_the_busiest_airports_in_Japan")
+
+japan_airports <- scrape(session) %>% 
+  html_nodes("table.wikitable:nth-child(8)") %>% 
+  .[[1]] %>% 
+  html_table()
+
+japan_airports_clean <- japan_airports %>% 
+  janitor::clean_names() %>% 
+  mutate(city = cityserved %>% iconv(from = "UTF-8", to = "ASCII//TRANSLIT")) %>% 
+  select(airport, city, iata_icao) %>% 
+  separate(iata_icao, c("IATA", "ICAO"), "\\/") %>% 
+  mutate(city = case_when(
+    ICAO == "RJAH" ~ "Ibaraki",
+    ICAO == "RJOK" ~ "Kochi",
+    TRUE ~ city
+  )) %>% 
+  filter(!ICAO %in% c("RJAA", "RJBB")) %>% 
+  glimpse()
 
 
 
+summer_weather <-  
+  map_df(japan_airports_clean$ICAO, riem_measures,
+         date_start = "2018-06-01",
+         date_end = "2018-08-12")
 
+# write.csv(summer_weather, file = "japan_summer_weather_06012018_08122018.csv")
+# summer_weather <- read.csv("japan_summer_weather_06012018_08122018.csv", 
+#                            stringsAsFactors = FALSE)
+
+glimpse(summer_weather)
+
+summer_weather %>% 
+  group_by(station) %>% 
+  summarise(max_temp = max(tmpf),
+            min_temp = min(tmpf))
+
+sum_air <- summer_weather %>% 
+  left_join(japan_airports_clean, by = c("station" = "ICAO")) %>% glimpse()
+
+sf_ja %>% 
+  ggplot() +
+  geom_sf() +
+  geom_point(data = sum_air, aes(x = lon, y = lat), color = "red")
+
+
+
+```
+
+
+```{r}
+japan_airports %>% 
+  mutate(city = Cityserved %>% iconv(from = "UTF-8", to = "ASCII//TRANSLIT")) %>% 
+  janitor::clean_names() %>% 
+  mutate_at(.vars = vars(matches("aircraft|passengers")), 
+            .funs = funs(str_replace_all(., ",", "") %>% as.numeric())) %>% 
+  glimpse()
+
+
+japan_airports %>% 
+  select_at(vars(matches("aircraft|passengers")))
+```
 
 
 
