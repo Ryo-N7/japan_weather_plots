@@ -29,7 +29,7 @@ source("scripts/source_encoding_932.r")
 
 
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 library(magrittr)
 library(jpndistrict)
 library(sf)
@@ -70,8 +70,7 @@ ja_weather_df <- sf_ja %>%
 ja_weather_df_fin <- ja_weather_df %>% 
   gather(key = "day", value = "temperature", -jis_code, -prefecture, -geometry)
 
-
-
+# facet to check
 ja_weather_df_fin %>% 
   ggplot() +
   geom_sf(aes(fill = temperature)) +
@@ -81,11 +80,70 @@ ja_weather_df_fin %>%
                                        "15~20"),
                             breaks = c(35, 30, 25, 20, 15),
                             limits = c(15, 37)) +
-  transition_manual(frames = day)
+  facet_wrap(~day)
+
+
+
+# animation
+ja_weather_df_fin %>% 
+  ggplot() +
+  geom_sf(aes(fill = temperature)) +
+  scale_fill_gradientn(colours = jmastats:::jma_pal(
+    palette = "relative", .attribute = FALSE)[5:1],
+                            labels = c("35~", "30~35", "25~30", "20~25",
+                                       "15~20"),
+                            breaks = c(35, 30, 25, 20, 15),
+                            limits = c(15, 37)) +
+  #transition_manual(frames = day)
+  transition_states(states = day, 
+                    transition_length = 3, 
+                    state_length = 1.5) +
+  ease_aes('sine-in-out') 
 
 ```
 
 
+
+
+
+
+
+```{r}
+ggplot(data = ja_weather_df_fin, aes(forcats::fct_reorder(prefecture, temperature),
+                                     temperature)) +
+    geom_line(aes(group = prefecture), size = 1.2, color = "skyblue") +
+    geom_point(aes(color = temperature, group = prefecture), size = 2) + facet_wrap(~day) +
+    scale_color_gradientn(colours = jmastats:::jma_pal(palette = "relative", 
+                                                       .attribute = FALSE)[5:1],
+                          labels = c("35~", "30~35", "25~30", "20~25",
+                                     "15~20"),
+                          breaks = c(35, 30, 25, 20, 15),
+                          limits = c(15, 37)) +
+    coord_flip() +
+    theme_minimal(base_size = 8) +
+    guides(color = guide_legend(title = paste("Temperature", "[\u2103]"),
+                                reverse = TRUE,
+                                title.position = "left",
+                                label.position = "bottom",
+                                keywidth = 2,
+                                nrow = 1)) +
+    theme(legend.position = "bottom") +
+    scale_x_discrete(expand = c(0,1)) +
+    scale_y_continuous(breaks = seq(0, 40, by = 10),
+                       minor_breaks = seq(0, 40, by = 5)) +
+    # guides(color = FALSE) +
+    labs(x = NULL,
+         y = NULL,
+         title = "2018年7月31日の各気象観測所における気温",
+         subtitle = "日最低・最高気温を表示",
+caption = "Source: 気象庁\nhttp://www.data.jma.go.jp/obd/stats/etrn/index.php")
+```
+
+
+
+
+
+- gg joy plot
 
 ```{r}
 library(ggridges)
@@ -131,6 +189,8 @@ temperature maps >>> airport weather stations
 library(riem)
 riem_stations_df <- riem_stations(network = "JP__ASOS")
 
+
+# web scrape Japan airport codes
 session <- bow("https://en.wikipedia.org/wiki/List_of_the_busiest_airports_in_Japan")
 
 japan_airports <- scrape(session) %>% 
@@ -152,7 +212,7 @@ japan_airports_clean <- japan_airports %>%
   glimpse()
 
 
-
+# grab weather data from stations
 summer_weather <-  
   map_df(japan_airports_clean$ICAO, riem_measures,
          date_start = "2018-06-01",
@@ -182,6 +242,15 @@ sf_ja %>%
 ```
 
 
+- lollipop chart (https://gist.github.com/uribo/3df84211cc48b50ec11655e17ea27ee1)
+
+```{r}
+
+```
+
+
+
+
 ```{r}
 japan_airports %>% 
   mutate(city = Cityserved %>% iconv(from = "UTF-8", to = "ASCII//TRANSLIT")) %>% 
@@ -198,3 +267,97 @@ japan_airports %>%
 
 
 
+
+
+
+- tile map of TOKYO avg. summer temperature (June-Sept) from Toyo Keizai: https://toyokeizai.net/sp/visual/tko/temperature/
+
+```{r}
+tky_stations <- jmastats::stations %>% 
+  filter(area == "東京") %>% 
+  filter(station_type %in% c("四"))
+
+tky_stations %>% 
+  mutate(
+    centroid = map(geometry, st_centroid),
+    coords = map(centroid, st_coordinates),
+    coord_x = map_dbl(coords, 1),
+    coord_y = map_dbl(coords, 2)) %>% 
+  select(-centroid, - coords) -> tky_stations
+
+sf_ja %>% 
+  filter(jis_code == 13) %>% 
+  ggplot() +
+  geom_sf() +
+  geom_point(data = tky_stations, aes(x = coord_x, y = coord_y)) +
+  coord_sf(xlim = c(138.5, 140), ylim = c(35, 36))
+
+
+```
+
+- row is ONE year
+- col is each day of the summer
+
+->>> transform in MAP form? use Tokyo 23 wards
+
+```{r}
+df_target_stations <-
+  stations %>%
+  # 観測装置の種類が「有線ロボット気象計」(いわゆるアメダス) であるものに制限
+  filter(station_type %in% c("四")) %>%
+  filter(block_no != "0092") %>%
+  group_by(pref_code, area) %>%
+  sample_n(1) %>%
+  ungroup() %>%
+  select(pref_code, area, station_name, block_no)
+
+
+
+df_targets <-
+  purrr::map2_dfr(
+    .x = df_target_stations$block_no %>%
+      set_names(),
+    .y = df_target_stations$station_name,
+    ~ jma_collect(item = "hourly",
+                  block_no = .x,
+                  year = 2018,
+                  month = 7,
+                  day = 31) %>% 
+      select(date, time, starts_with("temperature")) %>% 
+      #jmastats::parse_unit() %>% 
+      mutate(station = .y),
+    .id = "block_no")
+```
+
+
+
+
+```{r}
+library(jsonlite)
+
+tokyo_his_temp <- jsonlite::read_json("data/temperature.json", simplifyVector = TRUE)
+
+tokyo_his_temp %>% set_names(nm = 1876:2018) %>% bind_rows() %>% glimpse()
+
+tokyo_his_temp <- tokyo_his_temp %>% set_names(nm = 1876:2018)
+
+tokyo_his_temp %>% 
+  set_names(nm = 1876:2018) %>% 
+  map(~as.data.frame(.)) -> tokkkk
+
+tokkkk %>% 
+  map(., ~modify_if(., is.factor, as.character)) %>% 
+  map(., ~modify_if(., is.character, as.numeric)) %>% 
+  map2_df(., names(.), ~ mutate(., ID = .y)) %>% glimpse()
+  
+
+tokkkk %>% 
+  map(., ~modify_if(., is.factor, as.character) %>% 
+          modify_if(., is.character, as.numeric)) %>% 
+  map2_df(., names(.), ~ mutate(., ID = .y)) -> tokyo_weather_df
+
+```
+
+- figure out how to add dates grouped by year 
+- >>> annoying is that 2018 only has 47 days recorded (as not september yet)...
+- just filter out 2018 and set that individually??
