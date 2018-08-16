@@ -63,15 +63,31 @@ glimpse(sf_ja)
 set.seed(8)
 
 ja_weather_df <- sf_ja %>% 
-  mutate(dayone = rep(sample(x = 24:38, size = 47, replace = TRUE)),
-         daytwo = rep(sample(x = 24:38, size = 47, replace = TRUE)),
-         daythree = rep(sample(x = 24:38, size = 47, replace = TRUE))) %>% glimpse()
+  mutate(dayone = rep(sample(x = 24:34, size = 47, replace = TRUE)),
+         dayone_min = rep(sample(x = 20:24, size = 47, replace = TRUE)),
+         dayone_max = rep(sample(x = 35:38, size = 47, replace = TRUE)),
+         daytwo = rep(sample(x = 24:34, size = 47, replace = TRUE)),
+         daytwo_min = rep(sample(x = 20:24, size = 47, replace = TRUE)),
+         daytwo_max = rep(sample(x = 35:38, size = 47, replace = TRUE)),
+         daythree = rep(sample(x = 24:38, size = 47, replace = TRUE)),
+         daythree_min = rep(sample(x = 20:24, size = 47, replace = TRUE)),
+         daythree_max = rep(sample(x = 35:38, size = 47, replace = TRUE))) %>% glimpse()
 
 ja_weather_df_fin <- ja_weather_df %>% 
-  gather(key = "day", value = "temperature", -jis_code, -prefecture, -geometry)
+  gather(key = "day", value = "temperature", -jis_code, -prefecture, -geometry) %>% 
+  separate(day, into = c("day", "type"), remove = TRUE, sep = "_") %>% 
+  mutate(type = case_when(
+    is.na(type) ~ "avg",
+    TRUE ~ type
+  ))
 
+```
+
+
+```{r}
 # facet to check
 ja_weather_df_fin %>% 
+  filter(type == "avg") %>% 
   ggplot() +
   geom_sf(aes(fill = temperature)) +
   scale_fill_gradientn(colours = jmastats:::jma_pal(
@@ -105,38 +121,39 @@ ja_weather_df_fin %>%
 
 
 
-
-
+- lollipop chart (https://gist.github.com/uribo/3df84211cc48b50ec11655e17ea27ee1)
 
 ```{r}
-ggplot(data = ja_weather_df_fin, aes(forcats::fct_reorder(prefecture, temperature),
-                                     temperature)) +
-    geom_line(aes(group = prefecture), size = 1.2, color = "skyblue") +
-    geom_point(aes(color = temperature, group = prefecture), size = 2) + facet_wrap(~day) +
-    scale_color_gradientn(colours = jmastats:::jma_pal(palette = "relative", 
-                                                       .attribute = FALSE)[5:1],
-                          labels = c("35~", "30~35", "25~30", "20~25",
-                                     "15~20"),
-                          breaks = c(35, 30, 25, 20, 15),
-                          limits = c(15, 37)) +
-    coord_flip() +
-    theme_minimal(base_size = 8) +
-    guides(color = guide_legend(title = paste("Temperature", "[\u2103]"),
-                                reverse = TRUE,
-                                title.position = "left",
-                                label.position = "bottom",
-                                keywidth = 2,
-                                nrow = 1)) +
-    theme(legend.position = "bottom") +
-    scale_x_discrete(expand = c(0,1)) +
-    scale_y_continuous(breaks = seq(0, 40, by = 10),
-                       minor_breaks = seq(0, 40, by = 5)) +
-    # guides(color = FALSE) +
-    labs(x = NULL,
-         y = NULL,
-         title = "2018年7月31日の各気象観測所における気温",
-         subtitle = "日最低・最高気温を表示",
-caption = "Source: 気象庁\nhttp://www.data.jma.go.jp/obd/stats/etrn/index.php")
+ggplot(data = ja_weather_df_fin %>% filter(type != "avg"), 
+       aes(forcats::fct_reorder(prefecture, temperature),
+           temperature)) +
+  geom_line(aes(group = prefecture), size = 1.2, color = "skyblue") +
+  geom_point(aes(color = temperature, group = prefecture), size = 2) + 
+  facet_wrap(~day) +
+  scale_color_gradientn(colours = jmastats:::jma_pal(palette = "relative", 
+                                                     .attribute = FALSE)[5:1],
+                        labels = c("35~", "30~35", "25~30", "20~25",
+                                   "15~20"),
+                        breaks = c(35, 30, 25, 20, 15),
+                        limits = c(15, 37)) +
+  coord_flip() +
+  theme_minimal(base_size = 8) +
+  guides(color = guide_legend(title = paste("Temperature", "[\u2103]"),
+                              reverse = TRUE,
+                              title.position = "left",
+                              label.position = "bottom",
+                              keywidth = 2,
+                              nrow = 1)) +
+  theme(legend.position = "bottom") +
+  scale_x_discrete(expand = c(0,1)) +
+  scale_y_continuous(breaks = seq(0, 40, by = 10),
+                     minor_breaks = seq(0, 40, by = 5)) +
+  # guides(color = FALSE) +
+  labs(x = NULL,
+       y = NULL,
+       title = "2018年7月31日の各気象観測所における気温",
+       subtitle = "日最低・最高気温を表示",
+       caption = "Source: 気象庁\nhttp://www.data.jma.go.jp/obd/stats/etrn/index.php")
 ```
 
 
@@ -152,19 +169,131 @@ library(jmastats)
 ja_weather_df_fin %>% 
   ggplot(aes(x = temperature, y = day, fill = ..x..)) +
   geom_density_ridges_gradient() +
-  scale_fill_jma_absolute(type = "temperature")
+  scale_fill_jma_absolute(type = "temperature") +
+  facet_wrap(~type, ncol = 1)
 
 ```
 
 
+```{r}
+tokyo_weather_df %>% 
+  ggplot(aes(x = avg_temp, y = year)) +
+  geom_density_ridges()
+```
 
 
 
 Hex map
+- https://github.com/mikkelkrogsholm/hexamapmaker
+- https://uribo.hatenablog.com/entry/2017/10/20/100717
+- https://uribo.hatenablog.com/entry/2017/11/08/213751
+
 
 ```{r}
+library(magrittr)
+library(tidyverse)
+library(ggthemes)
+
+
+df.jp.prefs <- tibble::frame_data(
+  ~x, ~y, ~id,
+  15, 14, "HKD",
+  14, 12, "AOM",
+  15, 11, "IWT",
+  14, 11, "AKT",
+  14, 10, "MYG",
+  13, 10, "YGT",
+  14, 9, "FKS",
+  13, 9, "IBR",
+  12, 9, "NGT",
+  14, 8, "GNM",
+  13, 8, "SIT",
+  12, 8, "TCG",
+  11, 8, "TYM",
+  10, 8, "ISK",
+  14, 7, "CHB",
+  13, 7, "TKY",
+  12, 7, "YMN",
+  11, 7, "NGN",
+  10, 7, "FKI",
+  9, 7, "KYT",
+  8, 7, "HYO",
+  7, 7, "TTR",
+  6, 7, "SMN",
+  13, 6, "KNG",
+  12, 6, "SZO",
+  11, 6, "AIC",
+  10, 6, "GIF",
+  9, 6, "SIG",
+  8, 6, "OSK",
+  7, 6, "OKY",
+  6, 6, "HRS",
+  5, 6, "YMG",
+  10, 5, "MIE",
+  9, 5, "NAR",
+  9, 4, "WKY",
+  7, 4, "KGW",
+  6, 4, "EHM",
+  7, 3, "TKS",
+  6, 3, "KUC",
+  4, 5, "FKO",
+  3, 5, "SAG",
+  2, 5, "NGS",
+  3, 4, "OIT",
+  2, 4, "KUM",
+  3, 3, "MYZ",
+  2, 3, "KGS",
+  1, 1, "OKN"
+)
+```
+
+
+```{r}
+library(ggplot2)
+library(ggthemes)
+ggplot(df.jp.prefs, aes(x = x, y = y, group = id)) +
+      geom_point() +
+      coord_fixed(ratio = 1) +
+      theme_map()
+
+library(hexamapmaker)
+df.jp.prefs <- fix_shape(df.jp.prefs)
+df.jp.prefs.hex <- make_polygons(df.jp.prefs)
+
+(p <- ggplot(df.jp.prefs.hex, aes(x, y, group = id)) +
+    geom_polygon(fill = "white", colour = "black", show.legend = FALSE) +
+    coord_fixed(ratio = 1) +
+    theme_map())
+
+add_hexalabel(zz = df.jp.prefs.hex, p)
 
 ```
+
+use proper japan spatial data set
+
+
+```{r}
+jpn_hex <- sf_ja %>% 
+    mutate(
+    centroid = map(geometry, st_centroid),
+    coords = map(centroid, st_coordinates),
+    x = map_dbl(coords, 1),
+    y = map_dbl(coords, 2)) %>% 
+  select(-centroid, - coords, -jis_code, id = prefecture)
+
+jpn_hex_df <- fix_shape(jpn_hex)
+jpn_hex_df <- make_polygons(jpn_hex)
+
+(p <- ggplot(jpn_hex_df, aes(x, y, group = id)) +
+    geom_polygon(fill = "white", colour = "black", show.legend = FALSE) +
+    coord_fixed(ratio = 1) +
+    theme_map())
+
+add_hexalabel(zz = jpn_hex_df, p)
+
+```
+
+
 
 
 
@@ -242,14 +371,6 @@ sf_ja %>%
 ```
 
 
-- lollipop chart (https://gist.github.com/uribo/3df84211cc48b50ec11655e17ea27ee1)
-
-```{r}
-
-```
-
-
-
 
 ```{r}
 japan_airports %>% 
@@ -273,6 +394,18 @@ japan_airports %>%
 - tile map of TOKYO avg. summer temperature (June-Sept) from Toyo Keizai: https://toyokeizai.net/sp/visual/tko/temperature/
 
 ```{r}
+# just tokyo
+sf_pref13 <- jpn_pref(pref_code = 13, district = TRUE) %>% 
+    st_simplify(dTolerance = 0.0001) %>% 
+    mutate(city_code = as.numeric(city_code)) %>% 
+    filter(city_code != 13421) %>%  # filter out the Ogasawara Islands (off the coast)
+    st_union() %>% 
+    as.data.frame() %>% 
+    mutate(jis_code = "13", prefecture = "Tokyo") %>% 
+    magrittr::set_names(c("geometry", "jis_code", "prefecture")) %>% 
+    st_as_sf()
+
+
 tky_stations <- jmastats::stations %>% 
   filter(area == "東京") %>% 
   filter(station_type %in% c("四"))
@@ -285,12 +418,33 @@ tky_stations %>%
     coord_y = map_dbl(coords, 2)) %>% 
   select(-centroid, - coords) -> tky_stations
 
-sf_ja %>% 
-  filter(jis_code == 13) %>% 
+# longitude = sf::st_coordinates(geometry)[, 1],
+# latitude = sf::st_coordinates(geometry)[, 2]
+
+library(ggrepel)
+library(ggthemes)
+library(emojifont)
+load.fontawesome()
+loadfonts()
+
+tky_stations <- tky_stations %>% 
+  mutate(label = fontawesome(c("fa-university")))
+
+sf_pref13 %>% 
   ggplot() +
-  geom_sf() +
-  geom_point(data = tky_stations, aes(x = coord_x, y = coord_y)) +
-  coord_sf(xlim = c(138.5, 140), ylim = c(35, 36))
+  geom_sf(fill = "white") +
+  geom_label(data = tky_stations, 
+             aes(x = coord_x, y = coord_y,
+                 label = label),
+             family = "fontawesome-webfont") +
+  geom_label_repel(data = tky_stations,
+             aes(x = coord_x, y = coord_y,
+                 label = station_name),
+             size = 2, nudge_y = -0.025) +
+  coord_sf(xlim = c(138.85, 140), ylim = c(35.5, 36)) +
+  theme_minimal() +
+  theme(axis.title = element_blank(),
+        axis.ticks = element_blank())
 
 
 ```
@@ -334,30 +488,89 @@ df_targets <-
 
 ```{r}
 library(jsonlite)
+library(lubridate)
 
 tokyo_his_temp <- jsonlite::read_json("data/temperature.json", simplifyVector = TRUE)
 
-tokyo_his_temp %>% set_names(nm = 1876:2018) %>% bind_rows() %>% glimpse()
-
-tokyo_his_temp <- tokyo_his_temp %>% set_names(nm = 1876:2018)
-
 tokyo_his_temp %>% 
   set_names(nm = 1876:2018) %>% 
-  map(~as.data.frame(.)) -> tokkkk
+  map(~as.data.frame(.) %>% 
+        modify_if(., is.factor, as.character) %>% 
+        modify_if(., is.character, as.numeric)) %>% 
+  map2_df(., names(.), ~ mutate(., ID = .y)) %>% 
+  rename(avg_temp = ".",
+         year = ID) -> tokyo_weather_df
 
-tokkkk %>% 
-  map(., ~modify_if(., is.factor, as.character)) %>% 
-  map(., ~modify_if(., is.character, as.numeric)) %>% 
-  map2_df(., names(.), ~ mutate(., ID = .y)) %>% glimpse()
+# separate 2018 as data only up to 7/17
+tokyo_weather_df_2018 <- tokyo_weather_df %>% 
+  filter(year == 2018) %>% 
+  mutate(
+    date = seq.Date(from = as.Date("2018-06-01"), 
+                    by = "day",
+                    length = 47),
+    date = format(date, "%m/%d")
+  ) 
   
+# rest of the years, then combine back
+tokyo_weather_df <- tokyo_weather_df %>% 
+  filter(year != 2018) %>% 
+  group_by(year) %>% 
+  mutate(
+    date = seq.Date(from = as.Date("1876-06-01"), 
+                    by = "day",
+                    length = 122),
+    date = format(date, "%m/%d")
+  ) %>% 
+  full_join(tokyo_weather_df_2018) %>% glimpse()
 
-tokkkk %>% 
-  map(., ~modify_if(., is.factor, as.character) %>% 
-          modify_if(., is.character, as.numeric)) %>% 
-  map2_df(., names(.), ~ mutate(., ID = .y)) -> tokyo_weather_df
+glimpse(tokyo_weather_df)
+
+
+scale_fill_jma_absolute(
+    type = "temperature", 
+    guide = "colourbar",
+    na.value = "grey50")
 
 ```
+
+
+```{r}
+library(jmastats)
+library(extrafont)
+# loadfonts()
+
+tokyo_weather_df %>% 
+  ungroup() %>% 
+  mutate(year = as.numeric(year)) %>% 
+  ggplot(aes(x = date, y = year, fill = avg_temp)) +
+  geom_tile() +
+  scale_y_reverse(limits = c(2018, 1876), expand = c(0, 0)) +
+  scale_fill_gradientn(
+    colours = jmastats:::jma_pal(palette = "relative", .attribute = FALSE)[5:1],
+    labels = c("30~", "25~30", "20~25", "15~20","10~15"),
+    breaks = c(30, 25, 20, 15, 10),
+    limits = c(10, 35)) +
+  guides(fill = guide_legend(title = paste("Temperature", "[\u2103]"),
+                                reverse = TRUE,
+                                title.position = "left",
+                                label.position = "bottom",
+                                keywidth = 2, nrow = 1)) +
+  labs(title = "Average Temperature in Tokyo during the Summer (1872-2018)",
+       subtitle = glue::glue("
+          From June 1st to September 30th
+          One Row = One Year"),
+       caption = "Data from Toyo Keizai News via Japan Meteorological Agency") +
+  theme_minimal() +
+  theme(text = element_text(family = "Roboto Condensed"),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        panel.grid = element_blank(),
+        legend.position = "bottom")
+  
+```
+
 
 - figure out how to add dates grouped by year 
 - >>> annoying is that 2018 only has 47 days recorded (as not september yet)...
 - just filter out 2018 and set that individually??
+- use ggiraph for interactivity?
