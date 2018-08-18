@@ -1,0 +1,136 @@
+---
+title: "ggiraph"
+author: "RN7"
+date: "August 18, 2018"
+output: 
+  html_document:
+    keepd_md: TRUE
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r warning=FALSE, message=FALSE}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(scales)
+library(rvest)
+library(stringr)
+library(jsonlite)
+library(lubridate)
+library(glue)
+library(extrafont)
+library(scales)
+library(ggiraph)
+# loadfonts()
+```
+
+
+
+```{r}
+tokyo_his_temp <- jsonlite::read_json("data/temperature.json", simplifyVector = TRUE)
+
+tokyo_weather_df <- tokyo_his_temp %>% 
+  set_names(nm = 1876:2018) %>% 
+  map(~as.data.frame(.) %>% 
+        modify_if(., is.factor, as.character) %>% 
+        modify_if(., is.character, as.numeric)) %>% 
+  map2_df(., names(.), ~ mutate(., ID = .y)) %>% 
+  rename(avg_temp = ".",
+         year = ID)
+
+# separate 2018 as data only up to 7/17
+tokyo_weather_df_2018 <- tokyo_weather_df %>% 
+  filter(year == 2018) %>% 
+  mutate(
+    date = seq.Date(from = as.Date("2018-06-01"), 
+                    by = "day",
+                    length = 47),
+    date = format(date, "%m/%d")
+  ) 
+  
+# rest of the years, then combine back
+tokyo_weather_df <- tokyo_weather_df %>% 
+  filter(year != 2018) %>% 
+  group_by(year) %>% 
+  mutate(
+    date = seq.Date(from = as.Date("1876-06-01"), 
+                    by = "day",
+                    length = 122),
+    date = format(date, "%m/%d")
+  ) %>% 
+  ungroup() %>% 
+  full_join(tokyo_weather_df_2018) %>% 
+  mutate(year = as.numeric(year))
+```
+
+
+
+
+
+```{r}
+# colorbrewer2.org: diverging 8-class palette
+cols <- rev(c('#d53e4f','#f46d43','#fdae61','#fee08b','#e6f598','#abdda4','#66c2a5','#3288bd'))
+
+labels <- c("10", "12", "14", "16", "18", "20", "22", "24", "26", "28", "30", "32")
+
+breaks <- c(seq(10, 32, by = 2))
+
+
+tokyo_weather_df_ggiraph <- tokyo_weather_df %>% 
+  mutate(year = as.character(year),
+         date = date %>% str_replace_all("/", "-")) %>% 
+  unite(full_date, year, date, sep = "-", remove = FALSE) %>% 
+  mutate(full_date = as.Date(full_date) %>% 
+           format(., format = "%B %d, %Y"),
+         ) 
+
+tokyo_weather_df_ggiraph <- tokyo_weather_df_ggiraph %>% 
+  filter(!year == 2018) %>% 
+  mutate(tooltip = paste(full_date, ": ", avg_temp, intToUtf8(176), "C"),
+         year = as.numeric(year)) 
+
+
+```
+
+
+
+
+```{r}
+tkw <- tokyo_weather_df_ggiraph %>% 
+  ggplot(aes(x = date, y = year, fill = avg_temp)) +
+  geom_tile_interactive(aes(x = date, y = year, 
+                            fill = avg_temp, 
+                            tooltip = tokyo_weather_df_ggiraph$tooltip, 
+                            data_id = tokyo_weather_df_ggiraph$tooltip)) +
+  scale_fill_gradientn(
+    colours = cols,
+    labels = labels,
+    breaks = breaks,
+    limits = c(11, max(tokyo_weather_df_ggiraph$avg_temp))) +
+  guides(fill = guide_colorbar(title = expression("Temperature " ( degree~C)),
+                                reverse = FALSE,
+                                title.position = "left",
+                                nrow = 1)) +
+  labs(title = "Average Temperature in Tokyo during the Summer (1876-2017)",
+       subtitle = glue::glue("
+          From June 1st to September 30th
+          One Row = One Year"),
+       caption = "Data from Toyo Keizai News via Japan Meteorological Agency") +
+  theme_minimal() +
+  theme(text = element_text(family = "Roboto Condensed"),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        panel.grid = element_blank(),
+        legend.position = "bottom",
+        legend.key.width = unit(2, "cm"))
+
+
+ggiraph(code = print(tkw))
+```
+

@@ -23,13 +23,13 @@ heatwave plots: inspire from uribo's animation gifs   JMA Stats pkg
 prefecture flag map >>> download img use world cup shiny webscrape method
 
 
-```{r}
+```{r encoding JP script}
 source("scripts/source_encoding_932.r")
 ```
 
 
 
-```{r warning=FALSE, message=FALSE}
+```{r packages, warning=FALSE, message=FALSE}
 library(magrittr)
 library(jpndistrict)
 library(sf)
@@ -47,7 +47,7 @@ library(polite)
 ```
 
 
-```{r}
+```{r sf_ja}
 sf_ja <- 1:47 %>% 
     map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
     reduce(rbind) %>% 
@@ -57,7 +57,7 @@ sf_ja <- 1:47 %>%
 
 # simple implementation with each prefecture and a temperature (by day, hour, week, watever)
 
-```{r}
+```{r create sample data}
 glimpse(sf_ja)
 
 set.seed(8)
@@ -84,7 +84,7 @@ ja_weather_df_fin <- ja_weather_df %>%
 ```
 
 
-```{r}
+```{r sample animation}
 # facet to check
 ja_weather_df_fin %>% 
   filter(type == "avg") %>% 
@@ -121,9 +121,9 @@ ja_weather_df_fin %>%
 
 
 
-- lollipop chart (https://gist.github.com/uribo/3df84211cc48b50ec11655e17ea27ee1)
+# lollipop chart (https://gist.github.com/uribo/3df84211cc48b50ec11655e17ea27ee1)
 
-```{r}
+```{r lollipop chart}
 ggplot(data = ja_weather_df_fin %>% filter(type != "avg"), 
        aes(forcats::fct_reorder(prefecture, temperature),
            temperature)) +
@@ -160,9 +160,9 @@ ggplot(data = ja_weather_df_fin %>% filter(type != "avg"),
 
 
 
-- gg joy plot
+# gg joy plot
 
-```{r}
+```{r joyplot}
 library(ggridges)
 library(jmastats)
 
@@ -174,22 +174,13 @@ ja_weather_df_fin %>%
 
 ```
 
-
-```{r}
-tokyo_weather_df %>% 
-  ggplot(aes(x = avg_temp, y = year)) +
-  geom_density_ridges()
-```
-
-
-
-Hex map
+# Hex map
 - https://github.com/mikkelkrogsholm/hexamapmaker
 - https://uribo.hatenablog.com/entry/2017/10/20/100717
 - https://uribo.hatenablog.com/entry/2017/11/08/213751
 
 
-```{r}
+```{r coord data}
 library(magrittr)
 library(tidyverse)
 library(ggthemes)
@@ -248,7 +239,7 @@ df.jp.prefs <- tibble::frame_data(
 ```
 
 
-```{r}
+```{r hexmap}
 library(ggplot2)
 library(ggthemes)
 ggplot(df.jp.prefs, aes(x = x, y = y, group = id)) +
@@ -269,10 +260,9 @@ add_hexalabel(zz = df.jp.prefs.hex, p)
 
 ```
 
-use proper japan spatial data set
+- use proper japan spatial data set
 
-
-```{r}
+```{r hex with sf_ja}
 jpn_hex <- sf_ja %>% 
     mutate(
     centroid = map(geometry, st_centroid),
@@ -298,23 +288,23 @@ add_hexalabel(zz = jpn_hex_df, p)
 
 
 
-geofacet
+# geofacet
 
-```{r}
+```{r geofacet}
 
 ```
 
 
 
 
-temperature maps >>> airport weather stations
+# temperature maps >>> airport weather stations (RIEM package)
 
 
 - map() across years of summer months
 - combine/compare
 - calculate humidex like before as well!
 
-```{r}
+```{r riem}
 library(riem)
 riem_stations_df <- riem_stations(network = "JP__ASOS")
 
@@ -372,7 +362,7 @@ sf_ja %>%
 
 
 
-```{r}
+```{r _at() examples}
 japan_airports %>% 
   mutate(city = Cityserved %>% iconv(from = "UTF-8", to = "ASCII//TRANSLIT")) %>% 
   janitor::clean_names() %>% 
@@ -388,12 +378,9 @@ japan_airports %>%
 
 
 
+# tokyo weather stations map:
 
-
-
-- tile map of TOKYO avg. summer temperature (June-Sept) from Toyo Keizai: https://toyokeizai.net/sp/visual/tko/temperature/
-
-```{r}
+```{r tokyo weather stations}
 # just tokyo
 sf_pref13 <- jpn_pref(pref_code = 13, district = TRUE) %>% 
     st_simplify(dTolerance = 0.0001) %>% 
@@ -430,6 +417,10 @@ loadfonts()
 tky_stations <- tky_stations %>% 
   mutate(label = fontawesome(c("fa-university")))
 
+# change to a better CRS?
+st_crs(sf_pref13, 
+             crs = "+proj=eqdc +lat_0=0 +lon_0=138 +lat_1=34 +lat_2=40 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs") -> sf_pref13
+
 sf_pref13 %>% 
   ggplot() +
   geom_sf(fill = "white") +
@@ -441,7 +432,7 @@ sf_pref13 %>%
              aes(x = coord_x, y = coord_y,
                  label = station_name),
              size = 2, nudge_y = -0.025) +
-  coord_sf(xlim = c(138.85, 140), ylim = c(35.5, 36)) +
+  coord_sf(xlim = c(138.85, 140), ylim = c(35.5, 36), expand = c(0, 0)) +
   theme_minimal() +
   theme(axis.title = element_blank(),
         axis.ticks = element_blank())
@@ -484,22 +475,22 @@ df_targets <-
 ```
 
 
+# tile map of TOKYO avg. summer temperature (June-Sept) from Toyo Keizai: https://toyokeizai.net/sp/visual/tko/temperature/
 
-
-```{r}
+```{r tile map tokyo summer}
 library(jsonlite)
 library(lubridate)
 
 tokyo_his_temp <- jsonlite::read_json("data/temperature.json", simplifyVector = TRUE)
 
-tokyo_his_temp %>% 
+tokyo_weather_df <- tokyo_his_temp %>% 
   set_names(nm = 1876:2018) %>% 
   map(~as.data.frame(.) %>% 
         modify_if(., is.factor, as.character) %>% 
         modify_if(., is.character, as.numeric)) %>% 
   map2_df(., names(.), ~ mutate(., ID = .y)) %>% 
   rename(avg_temp = ".",
-         year = ID) -> tokyo_weather_df
+         year = ID)
 
 # separate 2018 as data only up to 7/17
 tokyo_weather_df_2018 <- tokyo_weather_df %>% 
@@ -521,41 +512,162 @@ tokyo_weather_df <- tokyo_weather_df %>%
                     length = 122),
     date = format(date, "%m/%d")
   ) %>% 
-  full_join(tokyo_weather_df_2018) %>% glimpse()
+  ungroup() %>% 
+  full_join(tokyo_weather_df_2018) %>% 
+  mutate(year = as.numeric(year))
 
 glimpse(tokyo_weather_df)
 
+```
 
+
+
+```{r}
 scale_fill_jma_absolute(
     type = "temperature", 
     guide = "colourbar",
     na.value = "grey50")
 
+dichromat_pal("DarkRedtoBlue.12")(12)
+dichromat_pal("DarkRedtoBlue.12")(12)[4:12]
+
+cols <- c("#1a9641", "#a6d96a", "#ffffbf", "#fdae61", "#d7191c")
+
+jmastats:::jma_pal(palette = "relative", .attribute = FALSE)[5:1]
+
 ```
 
 
-```{r}
+```{r plot tokyo summer, fig.height=8, fig.width=10}
 library(jmastats)
 library(extrafont)
+library(scales)
 # loadfonts()
 
+# colorbrewer2.org: diverging 8-class palette
+cols <- rev(c('#d53e4f','#f46d43','#fdae61','#fee08b','#e6f598','#abdda4','#66c2a5','#3288bd'))
+
+labels <- c("10", "12", "14", "16", "18", "20", "22", "24", "26", "28", "30", "32")
+
+breaks <- c(seq(10, 32, by = 2))
+
 tokyo_weather_df %>% 
-  ungroup() %>% 
-  mutate(year = as.numeric(year)) %>% 
   ggplot(aes(x = date, y = year, fill = avg_temp)) +
   geom_tile() +
   scale_y_reverse(limits = c(2018, 1876), expand = c(0, 0)) +
   scale_fill_gradientn(
-    colours = jmastats:::jma_pal(palette = "relative", .attribute = FALSE)[5:1],
-    labels = c("30~", "25~30", "20~25", "15~20","10~15"),
-    breaks = c(30, 25, 20, 15, 10),
-    limits = c(10, 35)) +
-  guides(fill = guide_legend(title = paste("Temperature", "[\u2103]"),
-                                reverse = TRUE,
+    colours = cols,
+    labels = labels,
+    breaks = breaks,
+    limits = c(11, max(tokyo_weather_df$avg_temp))) +
+  guides(fill = guide_colorbar(title = expression("Temperature " ( degree~C)),
+                                reverse = FALSE,
                                 title.position = "left",
                                 label.position = "bottom",
-                                keywidth = 2, nrow = 1)) +
-  labs(title = "Average Temperature in Tokyo during the Summer (1872-2018)",
+                                nrow = 1)) +
+  labs(title = "Summers in Tokyo are Getting Longer and Hotter (1876-2017)",
+       subtitle = glue::glue("
+          One Row = One Year, From June 1st to September 30th
+          Average Temperature (Celsius)
+          "),
+       caption = "Data from Toyo Keizai News via Japan Meteorological Agency") +
+  theme_minimal() +
+  theme(text = element_text(family = "Roboto Condensed", size = 12),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        panel.grid = element_blank(),
+        legend.position = "bottom",
+        legend.key.width = unit(3, "cm"))
+
+ggsave("tokyo_summer_temp_eng.png", plot = last_plot())
+```
+
+```{r tile map JP version, fig.height=8, fig.width=10}
+tokyo_weather_df %>% 
+  ggplot(aes(x = date, y = year, fill = avg_temp)) +
+  geom_tile() +
+  scale_y_reverse(limits = c(2018, 1876), expand = c(0, 0)) +
+  scale_fill_gradientn(
+    colours = cols,
+    labels = labels,
+    breaks = breaks,
+    limits = c(11, max(tokyo_weather_df$avg_temp))) +
+  guides(fill = guide_colorbar(title = expression("平均気温 " ( degree~C)),
+                                reverse = FALSE,
+                                title.position = "left",
+                                label.position = "bottom",
+                                nrow = 1)) +
+  labs(title = "東京の夏は「暑く・長く」なっている (1876年～2017年)",
+       subtitle = "6月1日～9月30日",
+       caption = "データ：気象庁") +
+  theme_minimal() +
+  theme(text = element_text(family = "Roboto Condensed", size = 12),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        panel.grid = element_blank(),
+        legend.position = "bottom",
+        legend.key.width = unit(3, "cm"))
+
+ggsave("tokyo_summer_temp_jp.png", plot = last_plot(), width = 10, height = 8)
+```
+
+
+
+- caveat: tokyo prefecutreis very wide: from tokyo bay coastline all the way to mountainous Hachioji area
+- not noted whether looking at tokyo weather from just the special 23 wards or the prefecture in general?
+- figure out how to add dates grouped by year 
+- >>> annoying is that 2018 only has 47 days recorded (as not september yet)...
+- just filter out 2018 and set that individually??
+- use ggiraph for interactivity?
+
+# ggiraph:
+
+
+```{r ggiraph data prep}
+library(glue)
+
+tokyo_weather_df_ggiraph <- tokyo_weather_df %>% 
+  mutate(year = as.character(year),
+         date = date %>% str_replace_all("/", "-")) %>% 
+  unite(full_date, year, date, sep = "-", remove = FALSE) %>% 
+  mutate(full_date = as.Date(full_date) %>% 
+           format(., format = "%B %d, %Y"),
+         ) %>% 
+  glimpse()
+
+tokyo_weather_df_ggiraph <- tokyo_weather_df_ggiraph %>% 
+  filter(!year == 2018) %>% 
+  mutate(tooltip = glue("
+                        {full_date}: {avg_temp}{intToUtf8(176)}C"),
+         year = as.numeric(year)) %>% glimpse()
+
+tokyo_weather_df_ggiraph <- tokyo_weather_df_ggiraph %>% 
+  filter(!year == 2018) %>% 
+  mutate(tooltip = paste(full_date, ": ", avg_temp, intToUtf8(176), "C"),
+         year = as.numeric(year)) %>% glimpse()
+
+```
+
+```{r ggiraph, fig.height=8, fig.width=10}
+library(ggiraph)
+
+tokyo_weather_ggiraph <- tokyo_weather_df_ggiraph %>% 
+  ggplot(aes(x = date, y = year, fill = avg_temp)) +
+  geom_tile_interactive(aes(x = date, y = year, 
+                            fill = avg_temp, 
+                            tooltip = tokyo_weather_df_ggiraph$tooltip, 
+                            data_id = tokyo_weather_df_ggiraph$tooltip)) +
+  scale_fill_gradientn(
+    colours = cols,
+    labels = labels,
+    breaks = breaks,
+    limits = c(11, max(tokyo_weather_df_ggiraph$avg_temp))) +
+  guides(fill = guide_colorbar(title = expression("Temperature " ( degree~C)),
+                                reverse = FALSE,
+                                title.position = "left",
+                                label.position = "bottom",
+                                nrow = 1)) +
+  labs(title = "Average Temperature in Tokyo during the Summer (1876-2017)",
        subtitle = glue::glue("
           From June 1st to September 30th
           One Row = One Year"),
@@ -565,12 +677,53 @@ tokyo_weather_df %>%
         axis.title = element_blank(),
         axis.text = element_blank(),
         panel.grid = element_blank(),
-        legend.position = "bottom")
-  
+        legend.position = "bottom",
+        legend.key.width = unit(1.5, "cm")) +
+  scale_y_reverse(limits = c(2018, 1876), expand = c(0, 0))
+
+ggiraph(code = print(tokyo_weather_ggiraph))
+
 ```
 
 
-- figure out how to add dates grouped by year 
-- >>> annoying is that 2018 only has 47 days recorded (as not september yet)...
-- just filter out 2018 and set that individually??
-- use ggiraph for interactivity?
+
+
+
+
+
+```{r}
+
+tkw <- tokyo_weather_df_ggiraph %>% 
+  ggplot(aes(x = date, y = year, fill = avg_temp)) +
+  geom_tile_interactive(aes(x = date, y = year, 
+                            fill = avg_temp, 
+                            tooltip = tokyo_weather_df_ggiraph$tooltip, 
+                            data_id = tokyo_weather_df_ggiraph$tooltip)) +
+  scale_fill_gradientn(
+    colours = cols,
+    labels = labels,
+    breaks = breaks,
+    limits = c(11, max(tokyo_weather_df_ggiraph$avg_temp))) +
+  guides(fill = guide_colorbar(title = expression("Temperature " ( degree~C)),
+                                reverse = FALSE,
+                                title.position = "left",
+                                nrow = 1)) +
+  labs(title = "Average Temperature in Tokyo during the Summer (1872-2017)",
+       subtitle = glue::glue("
+          From June 1st to September 30th
+          One Row = One Year"),
+       caption = "Data from Toyo Keizai News via Japan Meteorological Agency") +
+  theme_minimal() +
+  theme(text = element_text(family = "Roboto Condensed"),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        panel.grid = element_blank(),
+        legend.position = "bottom",
+        legend.key.width = unit(2, "cm")) +
+  scale_y_reverse(limits = c(2018, 1876), expand = c(0, 0))
+
+
+ggiraph(code = print(tkw), dep_dir = "C:/Users/Ryo Nakagawara/Documents/R_materials/japan_weather_plots/output")
+
+```
+

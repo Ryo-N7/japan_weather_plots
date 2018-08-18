@@ -1,0 +1,12 @@
+name: tokyo_weather_shiny_app
+title: tokyo_weather_shiny_app
+username:
+account: ryo-n7
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 402393
+bundleId: 1541694
+url: https://ryo-n7.shinyapps.io/tokyo_weather_shiny_app/
+when: 1534582696.1321
+asMultiple: FALSE
+asStatic: FALSE
