@@ -19,6 +19,8 @@ labels <- c("10", "12", "14", "16", "18", "20", "22", "24", "26", "28", "30", "3
 
 breaks <- c(seq(10, 32, by = 2))
 
+y_labs <- seq(1880, 2015, by = 10)
+
 # ggplot obj
 tkw <- tokyo_weather_df_ggiraph %>% 
   ggplot(aes(x = date, y = year, fill = avg_temp)) +
@@ -35,6 +37,9 @@ tkw <- tokyo_weather_df_ggiraph %>%
                                reverse = FALSE,
                                title.position = "left",
                                nrow = 1)) +
+  scale_y_continuous(breaks = c(1876, seq(1880, 2015, by = 10), 2017)) + 
+  scale_x_discrete(breaks = c("06-01", "07-01", "08-01", "09-01", "09-30"),
+                     labels = c("June 1st", "July 1st", "Aug. 1st", "Sept. 1st", "Sept. 30th")) +
   labs(title = "Summers in Tokyo are Getting Longer and Hotter (1876-2017)",
        subtitle = glue::glue("
                              One Row = One Year, From June 1st to September 30th
@@ -44,10 +49,10 @@ tkw <- tokyo_weather_df_ggiraph %>%
   theme_minimal() +
   theme(text = element_text(family = "Roboto Condensed"),
         axis.title = element_blank(),
-        axis.text = element_blank(),
         panel.grid = element_blank(),
         legend.position = "bottom",
-        legend.key.width = unit(2, "cm"))
+        legend.key.width = unit(2, "cm"),
+        plot.margin=unit(c(1,1,1.5,1.2),"cm"))
 
 
 

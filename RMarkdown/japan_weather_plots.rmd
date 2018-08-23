@@ -13,12 +13,18 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 
-heatwave plots: inspire from uribo's animation gifs   JMA Stats pkg
+- heatwave plots: inspire from uribo's animation gifs   JMA Stats pkg
 - japan times article reference
 - rise of japanese men using parasols, ignore stigma < health is more important!
 - fill map
 - joyplot
 - thermometer with highest temperature of the day/week/month?
+- japan west flooding + heavy rain
+- cartogram: non-contiguous, dorling (circles sizes)
+- animaton (sf_transitions) >>> japan map morph: hexagonal, cartogram, normal, square, etc.
+- yanet garcia
+- india kerala flooding
+- water basin >>> japan???
 
 prefecture flag map >>> download img use world cup shiny webscrape method
 
@@ -44,6 +50,7 @@ library(rvest)
 library(stringr)
 library(gganimate)
 library(polite)
+library(cartogram)
 ```
 
 
@@ -58,8 +65,6 @@ sf_ja <- 1:47 %>%
 # simple implementation with each prefecture and a temperature (by day, hour, week, watever)
 
 ```{r create sample data}
-glimpse(sf_ja)
-
 set.seed(8)
 
 ja_weather_df <- sf_ja %>% 
@@ -171,6 +176,18 @@ ja_weather_df_fin %>%
   geom_density_ridges_gradient() +
   scale_fill_jma_absolute(type = "temperature") +
   facet_wrap(~type, ncol = 1)
+
+tokyo_weather_df %>% 
+  ggplot(aes(x = avg_temp, y = date, fill = ..x..)) +
+  geom_density_ridges_gradient(scale = 10) +
+  #facet_grid(~ as.factor(year))
+  scale_y_discrete(breaks = c("06/01", "07/01", "08/01", "09/01", "09/30"),
+                     labels = c("June 1st", "July 1st", "Aug. 1st", 
+                                "Sept. 1st", "Sept. 30th")) +
+  scale_x_continuous(breaks = pretty_breaks()) +
+  scale_fill_jma_absolute(type = "temperature")
+
+
 
 ```
 
@@ -411,19 +428,18 @@ tky_stations %>%
 library(ggrepel)
 library(ggthemes)
 library(emojifont)
+library(extrafont)
 load.fontawesome()
 loadfonts()
 
 tky_stations <- tky_stations %>% 
   mutate(label = fontawesome(c("fa-university")))
 
-# change to a better CRS?
-st_crs(sf_pref13, 
-             crs = "+proj=eqdc +lat_0=0 +lon_0=138 +lat_1=34 +lat_2=40 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs") -> sf_pref13
-
 sf_pref13 %>% 
   ggplot() +
   geom_sf(fill = "white") +
+  coord_sf(xlim = c(138.9, 139.95),
+           ylim = c(35.47, 35.9)) +
   geom_label(data = tky_stations, 
              aes(x = coord_x, y = coord_y,
                  label = label),
@@ -432,10 +448,19 @@ sf_pref13 %>%
              aes(x = coord_x, y = coord_y,
                  label = station_name),
              size = 2, nudge_y = -0.025) +
-  coord_sf(xlim = c(138.85, 140), ylim = c(35.5, 36), expand = c(0, 0)) +
   theme_minimal() +
   theme(axis.title = element_blank(),
         axis.ticks = element_blank())
+
+
+# CRS: 3095 projection
+sf_pref13 %>% 
+  st_transform(crs = 3095) %>% 
+  ggplot() +
+  geom_sf(fill = "white") +
+  coord_sf(datum = st_crs(3095),
+           ylim = c(3900000, 4000000),
+           xlim = c(310000, 410000)) 
 
 
 ```
@@ -551,10 +576,11 @@ labels <- c("10", "12", "14", "16", "18", "20", "22", "24", "26", "28", "30", "3
 
 breaks <- c(seq(10, 32, by = 2))
 
+y_labs <- seq(1880, 2015, by = 10)
+
 tokyo_weather_df %>% 
   ggplot(aes(x = date, y = year, fill = avg_temp)) +
   geom_tile() +
-  scale_y_reverse(limits = c(2018, 1876), expand = c(0, 0)) +
   scale_fill_gradientn(
     colours = cols,
     labels = labels,
@@ -565,6 +591,11 @@ tokyo_weather_df %>%
                                 title.position = "left",
                                 label.position = "bottom",
                                 nrow = 1)) +
+  scale_y_reverse(limits = c(2017, 1876), expand = c(0, 0),
+                  breaks = c(1876, seq(1880, 2015, by = 10), 2017)) +
+  scale_x_discrete(breaks = c("06/01", "07/01", "08/01", "09/01", "09/30"),
+                     labels = c("June 1st", "July 1st", "Aug. 1st", 
+                                "Sept. 1st", "Sept. 30th")) +
   labs(title = "Summers in Tokyo are Getting Longer and Hotter (1876-2017)",
        subtitle = glue::glue("
           One Row = One Year, From June 1st to September 30th
@@ -574,13 +605,29 @@ tokyo_weather_df %>%
   theme_minimal() +
   theme(text = element_text(family = "Roboto Condensed", size = 12),
         axis.title = element_blank(),
-        axis.text = element_blank(),
         panel.grid = element_blank(),
         legend.position = "bottom",
-        legend.key.width = unit(3, "cm"))
+        legend.key.width = unit(3, "cm"),
+        plot.margin=unit(c(1,1,1.5,1.2),"cm"))
 
 ggsave("tokyo_summer_temp_eng.png", plot = last_plot())
 ```
+
+
+
+```{r LOG avg temp}
+tokyo_log_weather_df <- tokyo_weather_df %>% 
+  mutate(avg_temp = log10(avg_temp))
+
+
+tokyo_log_weather_df %>% 
+  ggplot(aes(x = date, y = year, fill = avg_temp)) + 
+  geom_tile() + 
+  scale_fill_jma_absolute() +
+  scale_y_reverse(limits = c(2020, 1875), expand = c(0, 0))
+```
+
+
 
 ```{r tile map JP version, fig.height=8, fig.width=10}
 tokyo_weather_df %>% 
@@ -726,4 +773,110 @@ tkw <- tokyo_weather_df_ggiraph %>%
 ggiraph(code = print(tkw), dep_dir = "C:/Users/Ryo Nakagawara/Documents/R_materials/japan_weather_plots/output")
 
 ```
+
+
+## cartograms
+
+
+
+```{r}
+ja_weather_df_fin %>% 
+  filter(day == "dayone", type == "avg") %>% 
+  st_transform(crs = "+init=epsg:3395") -> carto_base
+
+pref_pop_hist %>% 
+  filter(!prefectures == "Japan") %>% 
+  mutate(code = as.numeric(code)) -> pref_pop_hist
+
+
+pop_df <- ja_weather_df_fin %>% 
+  mutate(jis_code = as.numeric(jis_code)) %>% 
+  left_join(pref_pop_hist, c("jis_code" = "code")) %>% glimpse()
+
+
+pop_df_base <- pop_df %>% 
+  filter(day == "dayone", type == "avg", year == 2010) %>% 
+  st_transform(crs = "+init=epsg:3395")
+
+```
+
+
+
+```{r}
+library(tmap)
+
+
+carto_df <- carto_base %>% 
+  st_cast("MULTIPOLYGON") %>% 
+  cartogram_dorling("temperature", itermax = 500)
+
+tm_shape(ja_weather_df_fin) + 
+  tm_borders() +
+  tm_shape(carto_df) +
+  tm_polygons("temperature", style = "jenks", size = 0.5) +
+  tm_layout(frame = FALSE)
+
+carto_df <- pop_df_base %>% 
+  st_transform(crs = "+init=epsg:3395") %>% 
+  st_cast("MULTIPOLYGON") %>% 
+  cartogram_dorling("population", itermax = 500)
+
+tm_shape(carto_df) +
+  tm_polygons("population", style = "jenks", size = 0.5) +
+  tm_layout(frame = FALSE)
+
+```
+
+
+```{r}
+#
+carto_nca <- carto_base %>% 
+  st_cast("MULTIPOLYGON") %>% 
+  cartogram_ncont("temperature")
+
+tm_shape(ja_weather_df_fin) + 
+  tm_borders() +
+  tm_shape(carto_nca) +
+  tm_polygons("temperature", style = "jenks", size = 0.5) +
+  tm_layout(frame = FALSE)
+
+
+carto_nca <- pop_df_base %>% 
+  st_transform(crs = "+init=epsg:3395") %>% 
+  st_cast("MULTIPOLYGON") %>% 
+  cartogram_ncont("population")
+
+tm_shape(pop_df_base) + 
+  tm_borders() +
+  tm_shape(carto_nca) +
+  tm_polygons("population", style = "jenks", size = 0.5) +
+  tm_layout(frame = FALSE)
+
+
+```
+
+
+```{r}
+#
+
+cart_cac <- carto_base %>% 
+  st_cast("MULTIPOLYGON") %>% 
+  cartogram_cont("temperature", itermax = 10)
+
+tm_shape(cart_cac) +
+  tm_polygons("temperature", style = "jenks", size = 0.5) +
+  tm_layout(frame = FALSE)
+
+carto_df <- pop_df_base %>% 
+  st_transform(crs = "+init=epsg:3395") %>% 
+  st_cast("MULTIPOLYGON") %>% 
+  cartogram_cont("population")
+
+tm_shape(carto_df) +
+  tm_polygons("population", style = "pretty") +
+  tm_layout(frame = FALSE)
+
+```
+
+
 

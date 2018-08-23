@@ -1,0 +1,91 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "August 23, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Exploring Japan Weather Data
+
+
+
+Grab data from: RIEM package, JMAStats package
+
+
+
+
+
+Visualize with ggplot2, Shiny
+
+
+Spatial + weather map?
+
+grab japan spatial data from: jpndistrict package, kokudosuuchi package!
+
+
+
+Temperature HOT HOT HOT SUMMER
+
+humidity!! humidex calculations
+
+on the other hand...
+
+Precipitation! Rain + Flooding in Western Japan!
+
+typhoon season >>> WOrld CUp in 2002 had to be pushed earlier to avoid it!
+well, some of it at least <Japan vs. Turkey pic>
+
+Japan water basins?
+
+
+cartograms:
+
+we can look at bar graphs and other usual types but for those not familiar with japanese geography the results may not be obvious or unique
+
+so let's try plotting this data on top of a map of japan!
+
+but hey, some parts of japan are pretty small and we can't really see the data too well
+
+this is especially a problem for tokyo when you try to plot population data
+
+take a look at this example
+
+with tokyo being so populous, yet shows up as very small in terms of area size so it is not so easy to recognize at face-value
+
+
+what can we do?
+
+
+use cartograms 
+
+chroropeth maps
+
+geofacet
+
+etc.
+
+
+now without the geographic area of each prefecture/city town obscuring our abilty
+
+we can properly gauage the differences while still maintaing geographic fidelity due to the positioning o the transformed squares/hexagons/facets!!
+
+Modeling? 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
