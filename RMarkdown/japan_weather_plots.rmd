@@ -25,6 +25,7 @@ knitr::opts_chunk$set(echo = TRUE)
 - yanet garcia
 - india kerala flooding
 - water basin >>> japan???
+- climate warming stripes: http://www.climate-lab-book.ac.uk/2018/warming-stripes/
 
 prefecture flag map >>> download img use world cup shiny webscrape method
 
@@ -51,6 +52,7 @@ library(stringr)
 library(gganimate)
 library(polite)
 library(cartogram)
+library(forcats)
 ```
 
 
@@ -352,7 +354,7 @@ japan_airports_clean <- japan_airports %>%
 summer_weather <-  
   map_df(japan_airports_clean$ICAO, riem_measures,
          date_start = "2018-06-01",
-         date_end = "2018-08-12")
+         date_end = "2018-08-24")
 
 # write.csv(summer_weather, file = "japan_summer_weather_06012018_08122018.csv")
 # summer_weather <- read.csv("japan_summer_weather_06012018_08122018.csv", 
@@ -879,4 +881,53 @@ tm_shape(carto_df) +
 ```
 
 
+
+
+
+# climate stripes from Ed Hawkins
+
+- http://www.climate-lab-book.ac.uk/2018/warming-stripes/
+Data from yearly measurement table (Japan Meteorological Agency):
+- http://www.data.jma.go.jp/obd/stats/etrn/view/annually_s.php?prec_no=44&block_no=47662
+
+```{r fig.height=6, fig.width=8}
+url <- "http://www.data.jma.go.jp/obd/stats/etrn/view/annually_s.php?prec_no=44&block_no=47662"
+
+session_jma <- url %>% 
+  read_html() %>% 
+  html_nodes("#tablefix1") %>% 
+  .[[1]] %>% 
+  html_table(fill = TRUE, header = FALSE)
+
+# #tablefix1 > tbody:nth-child(1)
+
+
+glimpse(session_jma)
+
+tokyo_year_avg_temp <- session_jma %>% 
+  select(year = X1, avg_temp = X8) %>% 
+  slice(-c(1, 2, 3)) %>% 
+  mutate(avg_temp = avg_temp %>% str_remove("\\]") %>% as.numeric(),
+         year = as_factor(year))
+
+# 10 Class Divergent Rd-Bu: http://colorbrewer2.org/#type=diverging&scheme=RdBu&n=10
+temp_cols <- rev(c('#67001f','#b2182b','#d6604d','#f4a582','#fddbc7',
+               '#d1e5f0','#92c5de','#4393c3','#2166ac','#053061'))
+
+# filter out 1875 and 2018 due to uncertainties in the measurements
+
+tokyo_year_avg_temp %>% 
+  filter(!year %in% c(1875, 2018)) %>% 
+  ggplot(aes(x = year, fill = avg_temp)) +
+  geom_bar(position = "fill", width = 1) +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_fill_gradientn(colors = temp_cols, guide = FALSE) +
+  theme_void() +
+  theme(legend.position = "bottom")
+
+ggsave(filename = "../output/tokyo_yearly_avg_temp.png", height = 6, width = 8)
+
+range(tokyo_year_avg_temp$avg_temp) # 12.9 - 17.3
+```
 
