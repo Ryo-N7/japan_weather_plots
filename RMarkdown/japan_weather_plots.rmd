@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## 
+## Visualizing the Weather in Japan: A Sweltering Summer Story
 
 
 
@@ -31,7 +31,7 @@ prefecture flag map >>> download img use world cup shiny webscrape method
 
 
 ```{r encoding JP script}
-source("scripts/source_encoding_932.r")
+source("../scripts/source_encoding_932.r")
 ```
 
 
@@ -53,6 +53,9 @@ library(gganimate)
 library(polite)
 library(cartogram)
 library(forcats)
+library(extrafont)
+library(lubridate)
+loadfonts()
 ```
 
 
@@ -350,11 +353,39 @@ japan_airports_clean <- japan_airports %>%
   glimpse()
 
 
+
+safe_riem_measures <- safely(riem_measures)
+
 # grab weather data from stations
-summer_weather <-  
-  map_df(japan_airports_clean$ICAO, riem_measures,
+summer_weather_raw <-  
+  map_df(japan_airports_clean$ICAO, safe_riem_measures,
          date_start = "2018-06-01",
          date_end = "2018-08-24")
+
+
+```
+
+
+
+
+
+not working for some codes apparently... hmmmmmm...
+
+```{r}
+japan_airports_clean$ICAO %>% head() -> jac_1
+
+summer_weather <-  
+  map_df(jac_1, riem_measures,
+         date_start = "2018-06-01",
+         date_end = "2018-08-24")
+
+japan_airports_clean %>% slice(7:17) %>% select(ICAO) %>% as_vector() -> jac_2
+
+summer_weather2 <-  
+  map_df(jac_2, riem_measures,
+         date_start = "2018-06-01",
+         date_end = "2018-08-24")
+
 
 # write.csv(summer_weather, file = "japan_summer_weather_06012018_08122018.csv")
 # summer_weather <- read.csv("japan_summer_weather_06012018_08122018.csv", 
@@ -370,12 +401,50 @@ summer_weather %>%
 sum_air <- summer_weather %>% 
   left_join(japan_airports_clean, by = c("station" = "ICAO")) %>% glimpse()
 
+sum_air %>% 
+  mutate(jis_code = case_when(
+    city == "Tokyo" ~ 13,
+    city == "Fukuoka" ~ 40,
+    city == "Sapporo" ~ 1,
+    city == "Naha" ~ 47,
+    city == "Osaka" ~ 27,
+    city == "Nagoya" ~ 23
+  )) -> sum_air_codes
+
+
+# crazily granular >>> 30 minute intervals! TMI 
+sum_air_pref <- sum_air_codes %>% 
+  left_join(sf_ja %>% mutate(jis_code = as.numeric(jis_code)), by = "jis_code") %>% 
+  mutate(time = as_date(valid) %>% ymd()) %>% 
+  separate(time, into = c("year", "month", "day"), sep = "-") %>% 
+  group_by(month, day, station) %>% 
+  summarize(max_temp = max(tmpf),
+            min_temp = min(tmpf))
+
+```
+
+
+```{r skimr + kable}
+sum_air %>% 
+  skimr::skim_to_wide() %>% 
+  knitr::kable()
+```
+
+
+
+```{r}
+sum_air_pref %>% 
+  ggplot(aes(x = valid, y = tmpf))
+
+```
+
+
+```{r}
+
 sf_ja %>% 
   ggplot() +
   geom_sf() +
   geom_point(data = sum_air, aes(x = lon, y = lat), color = "red")
-
-
 
 ```
 
@@ -577,8 +646,6 @@ cols <- rev(c('#d53e4f','#f46d43','#fdae61','#fee08b','#e6f598','#abdda4','#66c2
 labels <- c("10", "12", "14", "16", "18", "20", "22", "24", "26", "28", "30", "32")
 
 breaks <- c(seq(10, 32, by = 2))
-
-y_labs <- seq(1880, 2015, by = 10)
 
 tokyo_weather_df %>% 
   ggplot(aes(x = date, y = year, fill = avg_temp)) +
@@ -890,7 +957,7 @@ tm_shape(carto_df) +
 Data from yearly measurement table (Japan Meteorological Agency):
 - http://www.data.jma.go.jp/obd/stats/etrn/view/annually_s.php?prec_no=44&block_no=47662
 
-```{r fig.height=6, fig.width=8}
+```{r scrape JMA annuals}
 url <- "http://www.data.jma.go.jp/obd/stats/etrn/view/annually_s.php?prec_no=44&block_no=47662"
 
 session_jma <- url %>% 
@@ -905,11 +972,21 @@ session_jma <- url %>%
 glimpse(session_jma)
 
 tokyo_year_avg_temp <- session_jma %>% 
-  select(year = X1, avg_temp = X8) %>% 
+  select(year = X1, avg_temp = X8, avg_high = X9, avg_low = X10, 
+         high_temp = X11, low_temp = X12) %>% 
   slice(-c(1, 2, 3)) %>% 
   mutate(avg_temp = avg_temp %>% str_remove("\\]") %>% as.numeric(),
+         avg_high = avg_high %>% str_remove("\\]") %>% as.numeric(),
+         avg_low = avg_low %>% str_remove("\\]") %>% as.numeric(),
+         high_temp = high_temp %>% str_remove("\\]") %>% as.numeric(),
+         low_temp = low_temp %>% str_remove("\\]") %>% as.numeric(),
          year = as_factor(year))
 
+```
+
+# bar code chart
+
+```{r fig.height=6, fig.width=8}
 # 10 Class Divergent Rd-Bu: http://colorbrewer2.org/#type=diverging&scheme=RdBu&n=10
 temp_cols <- rev(c('#67001f','#b2182b','#d6604d','#f4a582','#fddbc7',
                '#d1e5f0','#92c5de','#4393c3','#2166ac','#053061'))
@@ -929,5 +1006,58 @@ tokyo_year_avg_temp %>%
 ggsave(filename = "../output/tokyo_yearly_avg_temp.png", height = 6, width = 8)
 
 range(tokyo_year_avg_temp$avg_temp) # 12.9 - 17.3
+```
+
+With titles + labels:
+
+```{r fig.height = 6, fig.width=8}
+tokyo_year_avg_temp %>% 
+  filter(!year %in% c(1875, 2018)) %>% 
+  ggplot(aes(x = year, fill = avg_temp)) +
+  geom_bar(position = "fill", width = 1) +
+  scale_y_continuous(expand = c(0, 0.01)) +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_fill_gradientn(colors = temp_cols, "Average Temperature (Celsius)") +
+  labs(title = "Tokyo: Annual Average Temperature (1876-2017)",
+       subtitle = "One Stripe = One Year, Left: 1876, Right: 2017") +
+  theme_void() +
+  theme(text = element_text(family = "Roboto Condensed"),
+        legend.position = "bottom",
+        legend.title = element_text())
+
+ggsave(filename = "../output/tokyo_yearly_avg_temp_LABS.png", height = 6, width = 8)
+```
+
+
+
+BAD:
+
+```{r}
+tokyo_year_avg_temp %>% 
+  filter(!year %in% c(1875, 2018)) %>% 
+  ggplot(aes(x = year, y = avg_temp, group = 1)) +
+  geom_path() +
+  geom_segment(aes(y = avg_high, yend = avg_low, x = year, xend = year)) +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 25)) + # NO!
+  geom_point(aes(y = avg_high, x = year), color = "red") +
+  geom_point(aes(y = avg_low, x = year), color = "blue") +
+  geom_smooth() +
+  scale_x_discrete(breaks = pretty_breaks(10)) +
+  theme_minimal()
+```
+
+refer to: 
+- https://callingbullshit.org/tools/tools_misleading_axes.html
+- https://tamino.wordpress.com/2018/08/08/usa-temperature-can-i-sucker-you/
+
+```{r}
+tokyo_year_avg_temp %>% 
+  filter(!year %in% c(1875, 2018)) %>% 
+  ggplot(aes(x = year, y = avg_temp, group = 1)) +
+  geom_path() +
+  scale_y_continuous(expand = c(0, 0)) + 
+  geom_smooth() +
+  scale_x_discrete(breaks = pretty_breaks(10)) +
+  theme_minimal()
 ```
 
