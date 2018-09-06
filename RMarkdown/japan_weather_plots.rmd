@@ -386,6 +386,20 @@ summer_weather2 <-
          date_start = "2018-06-01",
          date_end = "2018-08-24")
 
+japan_airports_clean %>% slice(17:30) %>% select(ICAO) %>% as_vector() -> jac_3
+
+summer_weather3 <-  
+  map_df(jac_3, riem_measures,
+         date_start = "2018-06-01",
+         date_end = "2018-08-24")
+
+japan_airports_clean %>% slice(33:35) %>% select(ICAO) %>% as_vector() -> jac_4
+
+summer_weather4 <-  
+  map_df(jac_4, riem_measures,
+         date_start = "2018-06-01",
+         date_end = "2018-08-24")
+
 
 # write.csv(summer_weather, file = "japan_summer_weather_06012018_08122018.csv")
 # summer_weather <- read.csv("japan_summer_weather_06012018_08122018.csv", 
