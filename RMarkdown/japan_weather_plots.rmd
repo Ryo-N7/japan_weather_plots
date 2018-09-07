@@ -360,7 +360,7 @@ safe_riem_measures <- safely(riem_measures)
 summer_weather_raw <-  
   map_df(japan_airports_clean$ICAO, safe_riem_measures,
          date_start = "2018-06-01",
-         date_end = "2018-08-24")
+         date_end = "2018-08-31")
 
 
 ```
@@ -478,6 +478,119 @@ japan_airports %>%
 ```
 
 
+
+# jma stats 
+
+```{r jmastats data}
+library(jmastats)
+jpnprefs <- jpndistrict::jpnprefs
+
+tky <- jpnprefs %>% filter(jis_code == 13)
+
+lat <- jpnprefs %>% select(capital_latitude) %>% as_vector()
+lon <- jpnprefs %>% select(capital_longitude) %>% as_vector()
+
+tokyo_station <- nearest_station(latitude = tky$capital_latitude, 
+                                 longitude = tky$capital_longitude)
+
+tky_station2 <- pick_neighbor_stations(latitude = tky$capital_latitude,
+                                       longitude = tky$capital_longitude,
+                                       distance = 10, .unit = "km")
+
+stuf <- list(x = lon, y = lat)
+
+map2(x = lon, y = lat, 
+        .f = nearest_station(longitude = .x, latitude = .y)) -> jpn_coord_stations
+
+japan_one_stations <- map2(lon, lat, ~ nearest_station(.x, .y, geometry = NULL))
+
+saveRDS(japan_one_stations, file = "../data/japan_stations_coords.RDS")
+
+
+j_stat_ref <- japan_one_stations %>% 
+  map(~as.data.frame(.)) %>% 
+  reduce(rbind) 
+```
+
+```{r}
+# interestingly, the nearest_stations() function gives us a column showing how far away the station
+# is from the coordinates we supplied it with
+# let's take a look!
+
+j_stat_ref %>% 
+  summarize(avg_distance = mean(distance) / 1000)
+
+# so on avg. the stations were  2.2 km away from the prefecture capital coordinates we gave the fun
+# that's good enough for me!
+
+```
+
+
+```{r}
+j_station_df <- j_stat_ref %>% 
+  select(-geometry) %>% 
+  left_join(stations %>% st_set_geometry(NULL), by = c("station_no", "area", "station_name")) %>% 
+  glimpse()
+
+
+# erase duplicates
+
+j_ws_df <- j_station_df %>% 
+  distinct(station_name, .keep_all = TRUE) %>% 
+  glimpse()
+
+# now we got one station per prefecture that is as close to the capital as possible!
+
+```
+
+
+```{r warning=FALSE, message=FALSE}
+month <- c(6, 7, 8, 9)
+block_no <- j_ws_df %>% select(block_no) %>% as_vector()
+
+
+df <- crossing(block_no, month)
+
+j_sum_weather_raw <- map2(.x = df$block_no, .y = df$month, 
+        ~ jma_collect(item = "daily", block_no = .x, year = 2018, month = .y) %>% 
+          mutate(block = .x))
+
+saveRDS(j_sum_weather_raw, file = "../data/j_all_weather_raw.RDS")
+
+df <- df %>% 
+  unite("name", c("block_no", "month"), remove = FALSE) %>% 
+  glimpse()
+
+j_sum_weather_df <- j_sum_weather_raw %>% 
+  bind_rows() %>% 
+  glimpse()
+
+saveRDS(j_sum_weather_df, file = "../data/j_all_weather_df.RDS")
+```
+
+## sanity check jmastats
+
+OK, let's just make a quick check to make sure the temperature we got for each months/station pair is the correct one. Always check your work!
+
+```{r check right list order}
+sumo_montho <- map(.x = list(6, 7, 8), ~jma_collect(item = "daily", block_no = "0363", 
+                            year = 2018, month = .x))
+
+sumo_month_df <- sumo_montho %>% 
+  set_names(c("june", "july", "aug")) %>% 
+  bind_rows(., .id = "monthos") %>% 
+  select(monthos, date, avg_temp = `temperature_average(℃)`) %>% 
+  glimpse()
+
+sumo_month_df %>% 
+  mutate(station = "0363") %>% 
+  left_join(jj, by = c("station" = "block", "date")) %>% 
+  select(date, avg_temp, `temperature_average(℃)`, station) %>% 
+  head(10)
+
+```
+
+Right so avg_temp is from the one the data we just created that is definitely from station 0363 and the temperature_average is from the large dataframe we crossed + map'd earlier. Looking at `head(10)` and `tail(10)` (not shown here) the data matches up properly. (phew...)
 
 
 # tokyo weather stations map:
@@ -1075,3 +1188,55 @@ tokyo_year_avg_temp %>%
   theme_minimal()
 ```
 
+
+
+
+
+
+
+# transition reveal: temperatures across time
+
+
+```{r transition_reveal}
+library(jmastats)
+library(tidyr)
+
+jmastats::stations %>% filter(station_type == "四") -> jma_stations
+
+birthdayweather <- jma_collect(item = "hourly", block_no = "0370", 
+                               year = 2017, month = 6, day = 28)
+
+june_weather <- jma_collect(item = "daily", block_no = "0370", 
+                               year = 2017, month = 6)
+
+july_weather <- jma_collect(item = "daily", block_no = "0370", 
+                               year = 2017, month = 7)
+
+aug_weather <- jma_collect(item = "daily", block_no = "0370", 
+                               year = 2017, month = 8)
+
+list_we <- list(june_weather, july_weather, aug_weather)
+
+
+sum_we <- list_we %>% 
+  reduce(rbind)
+
+sum_we_fin <- sum_we %>% 
+  mutate(date = as_date(date) %>% ymd()) %>% 
+  rename(avg_temp = `temperature_average(℃)`) %>% 
+  separate(date, into = c("year", "month", "day"), sep = "-") %>% 
+  mutate(month = as.numeric(month),
+         day = as.numeric(day))
+
+library(gganimate)
+
+ggplot(sum_we_fin, aes(day, avg_temp, group = month)) +
+  geom_line() +
+  geom_segment(aes(xend = 31, yend = avg_temp)) +
+  geom_point() +
+  geom_text(aes(x = 31.1, label = month)) +
+  transition_reveal(month, day) +
+  ease_aes("linear")
+
+
+```
