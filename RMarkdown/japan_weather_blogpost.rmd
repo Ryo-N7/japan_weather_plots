@@ -41,12 +41,21 @@ library(extrafont)
 loadfonts()
 ```
 
+Before we get into anything else I will download Japan polygons using the `jpndistrict` package:
 
-- tokyo weather stations: spatial
+```{r japan_polygons}
+# Japan polygons from jpndistrict package
+sf_ja <- 1:47 %>% 
+    map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
+    reduce(rbind) %>% 
+    st_simplify(dTolerance = 0.01) %>% 
+  mutate(jis_code = as.numeric(jis_code))
+```
+
 
 First using the `jpn_pref()` function from the `jpndistrict` package we specify the spatial polygons data we want to grab. In the `pref_code` argument we pass **13** as that's the code for the Tokyo Prefecture. Then we use `st_simplify()` to 
 
-```{r}
+```{r tokyo_prefecture_polygons}
 sf_pref13 <- jpn_pref(pref_code = 13) %>% 
     st_simplify(dTolerance = 0.0001) %>% 
     mutate(city_code = as.numeric(city_code)) %>% 
@@ -59,6 +68,7 @@ sf_pref13 <- jpn_pref(pref_code = 13) %>%
 
 ```
 
+- tokyo weather stations: spatial
 From here we can use the weather stations metadata from the `jmastats` package and filter for stations located in Tokyo as well as select only those that are of type "四" or the AMeDAS stations that record temperature, precipitation, wind, and sunshine duration. We'll also include the regional weather headquarters in Tokyo for this map only (this station doesn't use AMeDAS).
 
 
@@ -424,66 +434,51 @@ tky <- jpnprefs %>% filter(jis_code == 13)
 lat <- jpnprefs %>% select(capital_latitude) %>% as_vector()
 lon <- jpnprefs %>% select(capital_longitude) %>% as_vector()
 
-tokyo_station <- nearest_station(latitude = tky$capital_latitude, 
-                                 longitude = tky$capital_longitude)
-
-tky_station2 <- pick_neighbor_stations(latitude = tky$capital_latitude,
-                                       longitude = tky$capital_longitude,
-                                       distance = 10, .unit = "km")
-
-stuf <- list(x = lon, y = lat)
-
 map2(x = lon, y = lat, 
         .f = nearest_station(longitude = .x, latitude = .y)) -> jpn_coord_stations
 
 japan_one_stations <- map2(lon, lat, ~ nearest_station(.x, .y, geometry = NULL))
 
-saveRDS(japan_one_stations, file = "../data/japan_stations_coords.RDS")
-
+# saveRDS(japan_one_stations, file = "../data/japan_stations_coords.RDS")
 
 j_stat_ref <- japan_one_stations %>% 
   map(~as.data.frame(.)) %>% 
   reduce(rbind) 
 ```
 
-```{r}
-# interestingly, the nearest_stations() function gives us a column showing how far away the station
-# is from the coordinates we supplied it with
-# let's take a look!
+Interestingly, the `nearest_stations()` function gives us a new column in our dataframe showing how far away the station is from the coordinates we supplied it with. let's take a look at the average distance of each station from each prefecture capital!
 
+```{r}
 j_stat_ref %>% 
   summarize(avg_distance = mean(distance) / 1000)
-
-# so on avg. the stations were  2.2 km away from the prefecture capital coordinates we gave the fun
-# that's good enough for me!
-
 ```
 
+so on avg. the stations were 2.2 km away from the prefecture capital coordinates we gave the fun
+that's good enough for me!
 
 ```{r}
 j_station_df <- j_stat_ref %>% 
   select(-geometry) %>% 
   left_join(stations %>% st_set_geometry(NULL), by = c("station_no", "area", "station_name")) %>% 
   glimpse()
+```
 
+let's erase duplicates
 
-# erase duplicates
-
+```{r}
 j_ws_df <- j_station_df %>% 
   distinct(station_name, .keep_all = TRUE) %>% 
   glimpse()
-
-# now we got one station per prefecture that is as close to the capital as possible!
-
 ```
 
+now we got one station per prefecture that is as close to the capital as possible!
 
 with the station data for each prefecture, we can now use the 
 `jma_collect()` function
 to grab the data for this summer's weather!
 
 ```{r warning=FALSE, message=FALSE}
-month <- c(6, 7, 8, 9)
+month <- c(6, 7, 8)
 block_no <- j_ws_df %>% select(block_no) %>% as_vector()
 
 
@@ -495,32 +490,36 @@ j_sum_weather_raw <- map2(.x = df$block_no, .y = df$month,
 
 #saveRDS(j_sum_weather_raw, file = "../data/j_all_weather_raw.RDS")
 
-df <- df %>% 
-  unite("name", c("block_no", "month"), remove = FALSE) %>% 
-  glimpse()
-
-j_sum_weather_df <- j_sum_weather_raw %>% 
+j_all_weather_df <- j_sum_weather_raw %>% 
   bind_rows() %>% 
-  janitor::clean_names() %>% 
-  glimpse()
+  janitor::clean_names()
 
-#saveRDS(j_sum_weather_df, file = "../data/j_all_weather_df.RDS")
+#saveRDS(j_all_weather_df, file = "../data/j_all_weather_df.RDS")
 ```
 
-```{r combine with spatial}
-j_all_weather_df %>% 
+```{r combine with station data}
+stations_df <- jmastats::stations %>% 
+  select(pref_code, block_no, station_name, station_no, area) %>% 
+  st_set_geometry(NULL)
+
+j_temp_stations_df <- j_all_weather_df %>% 
   select(date, block, contains("temperature")) %>% 
-  glimpse()
-
-stations_df <- jmastats::stations %>% st_set_geometry(NULL)
-
-j_all_weather_df %>% 
-  left_join(stations_df, by = c("block" = "block_no")) %>% View()
+  left_join(stations_df, by = c("block" = "block_no"))
 
 ```
 
 
 So now we have a large data frame for one station per prefecture from June to September!
+
+we can also add in spatial data to create maps:
+
+```{r combine with spatial}
+j_temp_map_stations_df <- j_temp_stations_df %>% 
+  mutate(pref_code = as.numeric(pref_code)) %>% 
+  left_join(sf_ja, by = c("pref_code" = "jis_code"))
+```
+
+
 
 The `jma_collect()` function gives us a lot of variables but depending on the station type some of these may not be filled. 
 
@@ -541,27 +540,56 @@ for those seeking other weather data it is important that you read the documenta
 So there's definitely a lot more steps compared to grabbing temperature data from the RIEM package but we are not limited to taking data from airport weather stations only!
 
 
+# Plotting weather data:
 
 
 
+```{r typical bar plot}
+library(gghighlight)
+
+ggplot(j_temp_map_stations_df) +
+  geom_line(aes(x = date, y = temperature_average, color = prefecture)) +
+  gghighlight(max(temperature_average) > 25)
 
 
+```
 
-# cartograms:
+or let's look at things by region
 
-we can look at bar graphs and other usual types but for those not familiar with japanese geography the results may not be obvious or unique
+- missing NAs throw off averaging...
+- imputate with previous day's avg_temp?
+
+```{r lollipop plot by region avg}
+j_temp_map_stations_df %>% 
+  left_join(jpndistrict::jpnprefs) %>% 
+  group_by(region) %>% 
+  summarize(region_avg_temp = mean(temperature_average))
+
+```
+
+we can look at bar graphs and other usual types but for those not familiar with japanese geography the results may not be obvious or unique or wouldn't provide much of a context
 
 so let's try plotting this data on top of a map of japan!
 
-```{r}
-
+```{r simple temp map}
+j_temp_map_stations_df %>% 
+  filter(date == "2018-06-01") %>% 
+  ggplot() +
+  geom_sf(aes(fill = temperature_average)) +
+  scale_fill_gradientn(colours = jmastats:::jma_pal(
+    palette = "relative", .attribute = FALSE)[5:1],
+                            labels = c("35~", "30~35", "25~30", "20~25",
+                                       "15~20"),
+                            breaks = c(35, 30, 25, 20, 15),
+                            limits = c(15, 37)) +
+  # animate
+  transition_states(states = date, 
+                    transition_length = 0.25, 
+                    state_length = 0.5) +
+  ease_aes('sine-in-out') 
 ```
 
 animation >>> cycle through 3-day period
-
-```{r}
-
-```
 
 
 but hey, some parts of japan are pretty small and we can't really see the data too well
@@ -578,14 +606,18 @@ what can we do?
 
 - use cartograms 
 
-- chroropeth maps: very simple >>> fill in avg. temperature for that pref
---> then animate! 
-
 - instead use GEOFACETS!!!
 now without the geographic area of each prefecture/city town obscuring our abilty
 
 ```{r}
+library(geofacet)
 
+j_temp_map_stations_df %>% 
+  rename(prefectures = prefecture) %>% 
+  ggplot(aes(date, temperature_average)) +
+  geom_line() +
+  facet_geo(~ prefectures, 
+            grid = "jp_prefs_grid1")
 ```
 
 
