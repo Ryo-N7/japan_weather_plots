@@ -558,12 +558,26 @@ or let's look at things by region
 
 - missing NAs throw off averaging...
 - imputate with previous day's avg_temp?
+- use `fill()` and direction = "up" for NA/missing to take the previous day's temperature
+- create english names for `jpndistrict::jpnpref` data set
 
 ```{r lollipop plot by region avg}
 j_temp_map_stations_df %>% 
   left_join(jpndistrict::jpnprefs) %>% 
+  distinct(station_name, .keep_all = TRUE) %>% 
+  filter(date == "2018-06-01") %>% 
+  fill(temperature_average, .direction = "up") %>% 
   group_by(region) %>% 
-  summarize(region_avg_temp = mean(temperature_average))
+  mutate(region_avg_temp = mean(temperature_average)) %>% 
+  ungroup() %>% 
+  filter(region == "関東") %>% 
+  ggplot(aes(x = temperature_average, y = prefecture)) +
+  geom_segment(aes(x = region_avg_temp, xend = temperature_average,
+                   yend = prefecture, 
+                   color = prefecture)) +
+  geom_point() +
+  geom_vline(aes(xintercept = region_avg_temp)) +
+  theme_minimal()
 
 ```
 
