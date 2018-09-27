@@ -439,19 +439,26 @@ j_sum_weather_raw <- map2(.x = df$block_no, .y = df$month,
 
 j_all_weather_df <- j_sum_weather_raw %>% 
   bind_rows() %>% 
-  janitor::clean_names()
+  select(1, 17, 5, 6, 7) %>% 
+  magrittr::set_colnames(c("date", "block", 
+                         "temperature_average", "temperature_max", "temperature_min")) 
 
 #saveRDS(j_all_weather_df, file = "../data/j_all_weather_df.RDS")
 
 # stations metadata
 stations_df <- jmastats::stations %>% 
   select(pref_code, block_no, station_name, station_no, area) %>% 
-  st_set_geometry(NULL) # no need for the geometry data now
+  st_set_geometry(NULL) # no need for the station coordinate data now
 
 # combine to get prefecture codes for each station
 j_temp_stations_df <- j_all_weather_df %>% 
-  select(date, block, contains("temperature")) %>% 
-  left_join(stations_df, by = c("block" = "block_no")) 
+  left_join(stations_df, by = c("block" = "block_no")) %>% 
+  # warning: some stations have same coordinates for 2 types...
+  distinct(block, date, .keep_all = TRUE) %>% 
+  mutate(pref_code = as.numeric(pref_code)) %>% 
+  left_join(jpnprefs %>% mutate(jis_code = as.numeric(jis_code)),
+            by = c("pref_code" = "jis_code")) %>% 
+  select(-contains("capital_l"))
 ```
 
 So now we have a large data frame for one station per prefecture from June to September!
@@ -464,13 +471,11 @@ sf_ja <- 1:47 %>%
     map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
     reduce(rbind) %>% 
     st_simplify(dTolerance = 0.01) %>% 
-  mutate(pref_code = as.numeric(pref_code)) %>% 
-  left_join(jpnprefs) %>% 
-  select(-jis_code, -contains("capital_l"))
+  mutate(pref_code = as.numeric(pref_code))
 
 j_temp_map_stations_df <- j_temp_stations_df %>% 
   mutate(pref_code = as.numeric(pref_code)) %>% 
-  left_join(sf_ja, by = c("pref_code"))
+  left_join(sf_ja, by = c("pref_code", "prefecture"))
 ```
 
 The `jma_collect()` function gives us a lot of variables but depending on the station type some of these may not be filled in. 
@@ -493,21 +498,26 @@ top 5 highest average temperature (averaged over the summer months period)?
 gghighlight package
 
 ```{r typical bar plot}
-library(gghighlight)
+cols <- c("Okinawa" = "#e41a1c", "Saga" = "#377eb8", 
+          "Kagoshima" = "#4daf4a", "Kumamoto" = "#984ea3",
+          "Gifu" = "#ff7f00")
 
-j_temp_map_stations_df %>% 
+j_temp_colors <- j_temp_stations_df %>% 
+    mutate(prefecture_en = str_replace(prefecture_en, "\\-.*", ""))
+
+j_temp_colors %>% 
   mutate(short_date = date %>% format(., "%b-%d")) %>% 
   ggplot() +
   geom_line(aes(x = date, y = temperature_average, color = prefecture_en)) +
+  scale_color_manual(values = cols) +
   gghighlight(mean(temperature_average), max_highlight = 5) +
   scale_x_date(aes(date_labels = short_date)) +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 5)) +
   labs(title = "Top 5 Prefectures with Highest Average Temperature (Celsius)", 
-       subtitle = "Averaged over the summer months",
-       x = "",
+       subtitle = "Averaged over the summer months (June 1st - August 31st)",
        y = "Average Temperature (Celsius)") +
   theme_minimal() +
-  theme()
+  theme(axis.title.x = element_blank())
 ```
 
 no surprises with southern prefectures especially Okinawa!
@@ -522,12 +532,37 @@ or let's look at things by region
 
 - let's just take a look at teh temperature for the day of the summer solstice (for 2018 it's June 21st)
 
+
+```{r}
+j_temp_stations_df %>% 
+  filter(date == "2018-06-21", region_en == "Kansai") %>% 
+  mutate(region_avg_temp = mean(temperature_average)) %>% 
+  mutate(perc = (((region_avg_temp - temperature_average) / 
+                    (region_avg_temp + temperature_average) / 2) ) %>% 
+           round(digits = 4)) %>% 
+  ggplot(aes(x = perc, y = reorder(prefecture_en, perc))) +
+  geom_segment(aes(x = perc, xend = 0,
+                   yend = prefecture_en), 
+               color = "skyblue")  +
+  geom_point(aes(color = prefecture_en), show.legend = FALSE) +
+  geom_vline(aes(xintercept = 0)) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 5), labels = percent) +
+  labs(title = glue::glue(
+    " Region on Summer Solstice"),
+    subtitle = glue::glue("Vertical line: Average Temperature for  Region"),
+    x = "Average Temperature (Celsius)",
+    y = "Prefecture") +
+  theme_minimal()
+```
+
+
+
+
+
+
 ```{r lollipop plot by region avg}
-region_plots <- j_temp_map_stations_df %>% 
-  left_join(jpndistrict::jpnprefs) %>% 
-  select(-jis_code, -contains("capital_l")) %>% 
+region_plots <- j_temp_stations_df %>% 
   filter(date == "2018-06-21") %>% 
-  distinct(block, .keep_all = TRUE) %>% 
   # fill(temperature_average, .direction = "up") %>%  ## NOT needed for summer solstice date
   group_by(region_en) %>% 
   mutate(region_avg_temp = mean(temperature_average)) %>% 
@@ -543,11 +578,12 @@ region_plots <- j_temp_map_stations_df %>%
                        geom_point(aes(color = prefecture_en), show.legend = FALSE) +
                        geom_vline(aes(xintercept = region_avg_temp)) +
                        scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
-                       labs(title = .x,
-                            subtitle = glue::glue(
-                              "Vertical line: Average Temperature for {.x} Region"),
-                            x = "Average Temperature (Celsius)",
-                            y = "Prefecture") +
+                       labs(title = glue::glue(
+                         "{.x} Region on the Summer Solstice"),
+                         subtitle = glue::glue(
+                           "Vertical line: Average Temperature for {.x} Region"),
+                         x = "Average Temperature (Celsius)",
+                         y = "Prefecture") +
                        theme_minimal())
   )
 
@@ -564,21 +600,24 @@ so let's try plotting this data on top of a map of japan!
 ```{r simple temp map}
 # library(gganimate)
 j_temp_map_stations_df %>% 
-  filter(date == "2018-06-21") %>% 
+  #filter(date %in% as.Date( c("2018-06-20", "2018-06-21", "2018-06-22"))) %>% 
   ggplot() +
   geom_sf(aes(fill = temperature_average)) +
   scale_fill_gradientn(colours = jmastats:::jma_pal(
-    palette = "relative", .attribute = FALSE)[5:1],
-                            labels = c("35~", "30~35", "25~30", "20~25",
-                                       "15~20"),
-                            breaks = c(35, 30, 25, 20, 15),
-                            limits = c(15, 37)) +
+    palette = "relative", .attribute = FALSE)[6:1],
+                            labels = c("35~", "30", "25", 
+                                       "20",  "15", "10"),
+                            breaks = c(35, 30, 25, 20, 15, 10),
+                            limits = c(9, 35.5),
+    name = "Average Temperature (Celsius)") +
   ggthemes::theme_map() +
   theme(legend.position = "right") +
+  labs(title = "{closest_state}") +
+  # transition_time(date)
   # animate
   transition_states(states = date, 
-                    transition_length = 0.25, 
-                    state_length = 0.5) +
+                    transition_length = 0.1, 
+                    state_length = 0.35) +
   ease_aes('sine-in-out') 
 ```
 
@@ -604,11 +643,9 @@ what can we do?
 - instead use GEOFACETS!!!
 now without the geographic area of each prefecture/city town obscuring our abilty
 
-```{r fig.height=10, fig.width=12}
-library(geofacet)
-
+```{r}
 pref_names <- j_temp_map_stations_df %>% 
-  #rename(prefectures = prefecture) %>% 
+  mutate(prefecture_en = str_replace(prefecture_en, "\\-.*", "")) %>% 
   distinct(pref_code, prefecture_en) %>% 
   arrange(pref_code) %>% 
   magrittr::use_series(prefecture_en)
@@ -616,17 +653,26 @@ pref_names <- j_temp_map_stations_df %>%
 jp_prefs_grid1 <- jp_prefs_grid1 %>% 
   arrange(code_pref_jis) %>% 
   mutate(prefecture_en = pref_names)
+```
 
-# region by color >>> 8-class divergent scale??
-j_temp_map_stations_df %>% 
+
+
+```{r fig.height=10, fig.width=12}
+cols <- c("Kyushu" = "#e41a1c", "Shikoku" = "#377eb8", "Chugoku" = "#4daf4a", "Chubu" = "#984ea3",
+          "Kansai" = "#ff7f00", "Kanto" = "#ffff33", "Tohoku" = "#a65628", "Hokkaido" = "#f781bf")
+
+j_temp_colors %>% 
   ggplot(aes(date, temperature_average)) +
-  geom_line(aes(color = prefecture_en, group = region_en), show.legend = FALSE) +
+  geom_line(aes(color = region_en), show.legend = FALSE) +
+  scale_color_manual(values = cols) +
   gghighlight(use_direct_label = FALSE) +
+  theme(axis.title = element_blank(),
+        panel.grid.minor = element_blank()) +
   facet_geo(~ prefecture_en, 
             grid = "jp_prefs_grid1")
 ```
 
-
+as japan is such a thin long country you can really see the differences in temperature between the southern and northern prefectures!
 we can properly gauage the differences while still maintaing geographic fidelity due to the positioning o the transformed squares/hexagons/facets!!
 
 geofacet >>> simple line graph showing daily avg temperature across time? 
