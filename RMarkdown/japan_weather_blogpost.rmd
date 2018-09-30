@@ -19,7 +19,7 @@ Let's Begin!
 
 ```{r encoding JP script, echo=FALSE}
 source("../scripts/source_encoding_932.r")
-options(encoding = "utf-8")
+#options(encoding = "utf-8")
 ```
 
 ```{r packages, warning=FALSE, message=FALSE}
@@ -205,15 +205,15 @@ tokyo_year_avg_temp %>%
 
 ```
 
-Very minimal yet very effective at showing the shift in temperature!
+Very minimal yet very effective at showing the shift in temperature over time!
 
 ## Gathering Japanese Weather Data ft. RIEM & JMAStats
 
-The two places I know where to get Japan weather data using R is via the `RIEM` and `JMAStats` packages. In this section I'll go through what you need to do to get the data.
+The two places I know where to get Japan weather data using R is via `RIEM` and `JMAStats`. In this section I'll go through what you need to do to get the data from both packages.
 
 ### RIEM
 
-The [RIEM](https://github.com/ropensci/riem) package is an [ROpenSci](https://ropensci.org/) project that lets you download airport weather data from the Iowa Environmental Mesonet website. You can search for airport networks from all over the world and the Japan ASOS stations take measurements at 30 minute intervals so you get A LOT of data!
+The [RIEM](https://github.com/ropensci/riem) package is a [ROpenSci](https://ropensci.org/) project authored by [Maelle Salmon]() that lets you download airport weather data from the Iowa Environmental Mesonet website. You can search for airport networks from all over the world and bacause the Japan ASOS stations take measurements at 30 minute intervals, you can get A LOT of data!
 
 I found about this package last year and I even made a [blog post](https://ryo-n7.github.io/2017-11-22-japan-xkcd-weather-index/) using it as I wanted to create XKCD-themed charts showing where the most comfortable place (weather-wise) to live in Japan was. In the example below I'll just be using the same set of Japanese airports I used back then, the top 50 busiest airports in Japan. I feel like it's a fair representation across the prefectures and I could use the "list of airports in Japan" wiki page but that has a lot of small airports and military base airports that wouldn't really be appropriate. 
 
@@ -302,16 +302,10 @@ sum_air %>%
 I took out a lot of the other weather variables like wind direction, wind speed, visibility, pressure altimeter, etc. that you can get from RIEM as I was only interested in the temperature stuff but you can see what each of them are from the [documentation](http://ropensci.github.io/riem/reference/riem_measures.html) or you can go directly to [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/ASOS/) website to find more details.
 
 ### JMAStats 
-- straight from the source! Japan Meteorological Agency
-- still a work-in-progress package by @uribo
-- i find navigating through japanese website to be a pain in the ass so this is a lifesaver!
-- comes with some great color scales too!
 
+In the visualizations I made in the first section, I used data from the JMA but either indirectly or through web scraping. So now I'll show you a way to get data using R without any need to manually download data files with the `JMAStats` package! This useful package is authored by [Shinya Uryu]() and it is still in the early stages of its development. Through a variety of [blog posts]() he has demonstrated some of the cool things you can do with it, even if you can't read Japanese I suggest you check it out for the visualizations!
 
-uribo basically did >>> sample and take 1 station from each prefecture then grab data from those stations
-
-
-First, let's create a small map of the JMA weather stations in Tokyo to give us a little context.
+First, let's create a small map of the JMA weather stations in Tokyo to give us a little context about the Japan Meteorolgical Agency and its weather stations.
 
 ## Tokyo prefecture weather stations map
 
@@ -327,8 +321,7 @@ We'll also include the regional weather headquarters in Tokyo for this map (this
 
 ```{r tokyo weather stations df}
 tky_stations_raw <- jmastats::stations %>% 
-  filter(area == "東京") %>% 
-  filter(station_type %in% c("四") | address == "千代田区北の丸公園　東京管区気象台")
+  filter(area == "東京" & address != "千代田区北の丸公園")
 
 tky_stations <- tky_stations_raw %>% 
   mutate(
@@ -341,7 +334,7 @@ tky_stations <- tky_stations_raw %>%
 
 There's still some islands but since they are part of districts on the mainland you can't just filter them out like we did with the Ogasawara Islands so I'm going to use the "hacksaw" approach and just cut them out from our view by specifying the x and y limits (the coordinates).
 
-Using the `jpn_pref()` function from the `jpndistrict` package we specify the spatial polygons data we want to grab. In the `pref_code` argument we pass **13** as that's the code for the Tokyo Prefecture. 
+Using the `jpn_pref()` function from the `jpndistrict` package we specify the spatial polygons data we want to grab. In the `pref_code` argument we pass **13** as that's the [code]() for the Tokyo Prefecture. 
 
 For the plot we'll use `fontawesome` to represent the weather stations with cool icons. There's no "weather station" icon so I just used something that looks like a buiding.
 
@@ -350,7 +343,7 @@ library(emojifont)
 load.fontawesome()
 
 sf_pref13 <- jpn_pref(pref_code = 13) %>% 
-    st_simplify(dTolerance = 0.0001) %>% 
+    st_simplify(dTolerance = 0.001) %>% 
     mutate(city_code = as.numeric(city_code)) %>% 
     filter(city_code != 13421) %>%  # filter out the Ogasawara Islands (waaayy off the coast)
     st_union() %>% 
@@ -360,6 +353,7 @@ sf_pref13 <- jpn_pref(pref_code = 13) %>%
     st_as_sf()
 
 tky_stations <- tky_stations %>% 
+  filter(coord_y > 35) %>% 
   mutate(label = fontawesome(c("fa-university")))
 
 sf_pref13 %>% 
@@ -381,7 +375,7 @@ sf_pref13 %>%
 
 ```
 
-With that you can see that the type "四" weather stations in Tokyo Prefecture are pretty well spread throughout the area.
+__With that you can see that the type "四" weather stations in Tokyo Prefecture are pretty well__ spread throughout the area. I'll go over the differences between the station types a bit later.
 
 Now that we got a little bit of context we can move on to the      !
 
@@ -487,7 +481,7 @@ The `jma_collect()` function gives us a lot of variables but depending on the st
 
 ```
 
-For my purposes I only wanted temperature data which is something nearly all station types collect so we are good to go! For those of you seeking other types weather data it is important that you read the documentation provided by the JMA. 
+For my purposes I only wanted temperature data which is something nearly all station types collect so we are good to go! For those of you seeking other types weather data it is important that you carefully read the documentation provided by the JMA. 
 
 So, there's definitely a lot more steps compared to the RIEM package but on the other hand we are not limited to taking data only from weather stations at airports!
 
@@ -496,9 +490,9 @@ So, there's definitely a lot more steps compared to the RIEM package but on the 
 Now that we've got our data, let's make some plots! 
 top 5 highest average temperature (averaged over the summer months period)?
 
-If we use `geom_line()` to check out how each of the prefectures stack up, it's really hard to interpret as there are so many lines! We could just filter for the top 5 but then we lose context as we can't see those in relation to the other prefectures. So, the solution here is the `gghighlight` package.
+If we use `geom_line()` to check out how each of the prefectures stack up, it's really hard to interpret as there are so many lines! We could just `filter()` for the top 5 or use `top_n()` but then we lose context as we can't see those lines in relation to the other prefectures. So, the solution here is the `gghighlight` package.
 
-We can use the `gghighlight()` function and we specify the filtering variable as the average of the average temperatures and with the `max_highlight` argument we can define the exact number of prefectures we want.
+We can use the `gghighlight()` function and we specify the filtering variable as the average of the average temperatures and with the `max_highlight` argument we can define the exact number of the top prefectures we want.
 
 ```{r typical bar plot}
 cols <- c("Okinawa" = "#e41a1c", "Saga" = "#377eb8", 
@@ -506,7 +500,7 @@ cols <- c("Okinawa" = "#e41a1c", "Saga" = "#377eb8",
           "Gifu" = "#ff7f00")
 
 j_temp_colors <- j_temp_stations_df %>% 
-  # remove the prefecture suffixes
+    # remove the prefecture suffixes from the english names
     mutate(prefecture_en = str_replace(prefecture_en, "\\-.*", ""))
 
 j_temp_colors %>% 
@@ -571,6 +565,8 @@ These regions are divided into the officla regional divisions of Japan. Although
 We can look at bar graphs and other usual types but for those not familiar with japanese geography the results may not be obvious or unique or wouldn't provide much of a context
 
 so let's try plotting this data on top of a map of japan!
+
+the JMA stats package also comes with some very nice color palettes similar to those used by the JMA, 
 
 ```{r temp map animation}
 # library(gganimate)
@@ -640,7 +636,7 @@ jp_prefs_grid1 <- jp_prefs_grid1 %>%
   mutate(prefecture_en = pref_names)
 ```
 
-Then set up the colors for each region and plot:
+Then set up the colors for each region and plot. The `use_direct_label` argument in `gghighlight()` is used to specify whether you want the labels added on the plot (TRUE) or in the legend (FALSE). The main function to note here is the `facet_geo()` function which allows you to specify how your facets are laid out geometrically. There are currently 64 grids from all over the world available in the package and you specify them using the `grid` argument. 
 
 ```{r geofacet plot, fig.height=10, fig.width=12}
 cols <- c("Kyushu" = "#e41a1c", "Shikoku" = "#377eb8", "Chugoku" = "#4daf4a", "Chubu" = "#984ea3",
@@ -653,7 +649,8 @@ j_temp_colors %>%
   scale_y_continuous(breaks = c(10, 20, 30)) +
   gghighlight(use_direct_label = FALSE) +
   theme_minimal() +
-  theme(axis.title = element_blank(),
+  theme(text = element_text(family = "Roboto Condensed"),
+        axis.title = element_blank(),
         panel.grid.minor.x = element_blank(),
         strip.background = element_rect(color = "black", linetype = "solid"),
         axis.text = element_text(size = 8)) +
@@ -662,12 +659,9 @@ j_temp_colors %>%
 ```
 
 as japan is such a thin long country you can really see the differences in temperature between the southern and northern prefectures!
-we can properly gauage the differences while still maintaing geographic fidelity due to the positioning o the transformed squares/hexagons/facets!!
-
-geofacet >>> simple line graph showing daily avg temperature across time? 
+we can properly gauage the differences while still maintaing geographic fidelity due to the positioning of the transformed squares/hexagons/facets!!
 
 
-etc.
 
 
 
@@ -685,7 +679,9 @@ Tokyo (2073): 43 days (39-58)
 
 
 
+the past few summers have been scorching hot raising several issues throughout japanese society
 
+foremost being the Tokyo Olympics in 2020. 
 
 - Tokyo Olympics 2020 >>> Marathon starting times fiasco (really? are we really going to 
 do day light savings time for 2 months??? idiots.)
@@ -698,18 +694,13 @@ on the other hand...
 
 # Precipitation! Rain + Flooding in Western Japan!
 
-typhoon season >>> WOrld CUp in 2002 had to be pushed earlier to avoid it!
-well, some of it at least <Japan vs. Turkey pic>
+i meant to have this blog post done by end of august but work got in the way, then i went to EARL London (R Conference) and HELLOO OCTOBER!
 
-Japan water basins?
-- rayshader package
+Now the weather is kinda starting to cool down and there's more concern over the typhoons and torrential rains hitting all regions of Japan. As both JMA and ASOS stations also collect precipitation data maybe my next post will be on the rain! Other ideas could be weather forecasting models or taking a look at how rainfall affects water basins in Japan with the `rayshader` package? There's plenty of cool applications and visualizations you can do with this data so I encourage you to try it out! 
 
-# Modeling? 
-- i'm no expert but let's start with a somewhat naive approach?
-- try more complicated techniques
-- ... leave it to the experts lol
+Thanks for reading and see you next time!
 
-for NEXT time.
+![]() teru-teru-bouzu pic
 
 
 
