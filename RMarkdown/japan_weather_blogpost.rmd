@@ -2,7 +2,9 @@
 title: "Visualizing the Weather in Japan: A Sweltering Summer Story"
 author: "RN7"
 date: "August 23, 2018"
-output: html_document
+output: 
+  md_document:
+    variant: markdown_github
 ---
 
 ```{r setup, include=FALSE}
@@ -45,14 +47,14 @@ library(extrafont)
 loadfonts(device = "win")
 ```
 
-## Heatmap:: Tokyo average temperature (1876-2016)
+## Tokyo Average Temperature Heatmap (1876-2016)
 
 Back in July, at the height of the summer heatwave, I came across [this](https://toyokeizai.net/sp/visual/tko/temperature/) visualization by Toyo Keizai News on Twitter. Interestingly they provided a `.json` file of the data so I wanted to try recreating this in R!
 
 On one hand, we could just use the `JMAStats` package that I mentioned earlier to grab the data ourselves but since I had never dealt with `.JSON` data before I felt it was as good time as any to finally dive into it. Also, why go through the trouble if you already have the data sitting right there for you?
 
 Let's go through what we have to do. First, use the `read_json()` function from the `jsonlite` package to read in the data. Then, set the names for each vector with the year it corresponds to. Oddly some of the temperature values are factors so we need to change them into numeric. Then using another mapper function, we assign a new `year` variable to each of the "temperature per year" dataframes with their respective years. Basically we're bringing the year label we created for each list into an explicit value in the single (combined) dataframe that we map as the output. 
-```{r tokyo weather json}
+```{r tokyo weather json, warning=FALSE}
 tokyo_his_temp <- jsonlite::read_json("../data/temperature.json", simplifyVector = TRUE)
 
 tokyo_weather_df <- tokyo_his_temp %>% 
@@ -61,7 +63,10 @@ tokyo_weather_df <- tokyo_his_temp %>%
         modify_if(., is.factor, as.character) %>% 
         modify_if(., is.character, as.numeric)) %>% 
   map2_df(., names(.), ~ mutate(., year = .y)) %>% 
-  rename(avg_temp = ".")
+  rename(avg_temp = ".") %>% 
+  mutate(year = as.numeric(year))
+
+tokyo_weather_df %>% glimpse()
 ```
 
 Now we have a very lengthy data frame with the temperatures and their respective year. Now we have to add in the specific month-day pairs for each of the years. The heat map is going to be running from June 1st to September 30th, a span of 122 days. We can use the `seq.Date()` function to create a new variable of dates running from these two dates grouped by year.
@@ -76,8 +81,7 @@ tokyo_weather_df <- tokyo_weather_df %>%
                     length = 122),
     date = format(date, "%m/%d")
   ) %>% 
-  ungroup() %>% 
-  mutate(year = as.numeric(year))
+  ungroup()
 
 glimpse(tokyo_weather_df)
 ```
@@ -95,10 +99,9 @@ labels <- c("10", "12", "14", "16", "18", "20", "22", "24", "26", "28", "30", "3
 breaks <- c(seq(10, 32, by = 2))
 ```
 
-The ggplot2 code I used was fairly straightforward, a nifty new package I started using was the `glue` package by [Jim Hester](https://twitter.com/jimhester_), basically to get the text to form multiple lines in the plot (so I don't have to use "\n" inside `paste()`). We'll see more uses of this in my other visualizations later on!
+The `ggplot2` code I used was fairly straightforward. A nifty new package I started using lately is the `glue` package by [Jim Hester](https://twitter.com/jimhester_), I used it here to format the text to appear in multiple lines in the plot (so I don't have to use "\n" inside `paste()`). We'll see more uses of this in my other visualizations later on!
 
 ```{r plot tokyo summer, fig.height=8, fig.width=10}
-# library(scales)
 tokyo_weather_df %>% 
   ggplot(aes(x = date, y = year, fill = avg_temp)) +
   geom_tile() +
@@ -132,9 +135,9 @@ tokyo_weather_df %>%
         plot.margin=unit(c(1,1,1.5,1.2),"cm"))
 ```
 
-Although Toyo Keizai stated that the data came from the [Japan Meteorological Agency](https://www.jma.go.jp/jma/indexe.html) (I'll most be referring to them as the __JMA__ from here on out) and the measure is the average temperature for that day, I don't know if the temperatures comes from the entirety of the Tokyo Prefecture (including the islands off the coast) or just from the 23 special wards that make up Tokyo City. It's not necessarily a huge concern but it is something to consider.
+Although Toyo Keizai stated that the data came from the [Japan Meteorological Agency](https://www.jma.go.jp/jma/indexe.html) (I'll mostly be referring to them as the __JMA__ from here on out) and the measure is the average temperature for that day, I don't know if the temperatures comes from the entirety of the Tokyo Prefecture (including the islands off the coast) or just from the 23 special wards that make up Tokyo City. It's not necessarily a huge concern but it is something to consider.
 
-For those that want a more granular look I also created a Shiny app version of the above ([here](https://ryo-n7.shinyapps.io/tokyo_weather_shiny_app/)) so you can scroll around and look at the temperature for a specific day/year.
+For those that want to take a closer look I also created a Shiny app version of the above ([here](https://ryo-n7.shinyapps.io/tokyo_weather_shiny_app/)) so you can scroll around and look at the temperature for a specific day/year.
 
 ## Tokyo Climate Stripes
 
@@ -150,10 +153,9 @@ session_jma <- url %>%
   html_nodes("#tablefix1") %>% 
   .[[1]] %>% 
   html_table(fill = TRUE, header = FALSE)
-
 ```
 
-Welp. What a giant mess of a table! Thankfully our trust `dplyr` verbs and `regex` can solve our problems. Et Voila!
+Welp. What a giant mess of a table! Thankfully our trust `dplyr` verbs and `regex` can solve our problems. Et Voilà!
 
 ```{r annual df clean}
 tokyo_year_avg_temp <- session_jma %>% 
@@ -166,6 +168,8 @@ tokyo_year_avg_temp <- session_jma %>%
          high_temp = high_temp %>% str_remove("\\]") %>% as.numeric(),
          low_temp = low_temp %>% str_remove("\\]") %>% as.numeric(),
          year = forcats::as_factor(year))
+
+tokyo_year_avg_temp %>% glimpse()
 ```
 
 I was wondering what kind of color palette Ed used... so going back to the Twitter thread I saw somebody opine that he might have used the "10-class divergent RD-BU" from `colorbrewer2.org`. I checked it out and it seemed very similar so I went ahead with that!
@@ -178,12 +182,10 @@ temp_cols <- rev(c('#67001f','#b2182b','#d6604d','#f4a582','#fddbc7',
 
 The plot was very simple. I used `geom_bar()` for the stripes and specified `width = 1` so that the bars left no gap in between each other. Then I erased all the axes and labels with `theme_void()`.
 
-```{r climate stripe plot, fig.height=6, fig.width=8}
-library(extrafont)
-loadfonts(device = "win")
-
+```{r climate stripe plot, fig.height=6, fig.width=8, warning=FALSE, message=FALSE}
 tokyo_year_avg_temp %>%
   # filter out 1875 and 2018 due to uncertainties in the measurements
+  # http://www.data.jma.go.jp/obd/stats/data/mdrr/man/remark.html
   filter(!year %in% c(1875, 2018)) %>% 
   ggplot(aes(x = year, fill = avg_temp)) +
   geom_bar(position = "fill", width = 1) +
@@ -207,7 +209,7 @@ The two places I know where to get Japan weather data using __R__ is via `RIEM` 
 
 ### RIEM
 
-The [RIEM](https://github.com/ropensci/riem) package is a [ROpenSci](https://ropensci.org/) project authored by [Maëlle Salmon](https://masalmon.eu/) that lets you download airport weather data from the[Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/) website. You can search for airport networks from all over the world and bacause the Japan ASOS weather stations take measurements at 30 minute intervals, you can get A LOT of data!
+The [RIEM](https://github.com/ropensci/riem) package is a [ROpenSci](https://ropensci.org/) project authored by [Maëlle Salmon](https://masalmon.eu/) that lets you download airport weather data from the [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/) website. You can search for airport networks from all over the world and bacause the Japan ASOS weather stations take measurements at 30 minute intervals, you can get A LOT of data!
 
 I found about this package last year through a `#rstats` mini event on Twitter (started off [here](https://masalmon.eu/2017/11/16/wheretoliveus/)) where people started to create [XKCD-themed](https://xkcd.com/1916/) charts showing the most comfortable (weather-wise) place to live. I even made a [blog post](https://ryo-n7.github.io/2017-11-22-japan-xkcd-weather-index/) last year showing a version of this chart for Japan!
 
@@ -238,12 +240,11 @@ japan_airports_clean <- japan_airports %>%
   # filter out RJNA (Nagoya) as not working for some reason
   # RJGG is also Nagoya so I'll use that instead
   filter(!ICAO %in% c("RJAA", "RJBB", "RJNA"))
-
 ```
 
 Now that we have the ICAO codes for the Japanese airports we want, we can pass these codes into the `riem_measures()` function along with the date range. We use a mapper function `map_df()` as we want to iterate over all the airport codes in one go.
 
-```{r weather data RIEM measures}
+```{r weather data RIEM measures, warning=FALSE}
 # grab weather data from stations
 summer_weather_riem_raw <-  
   map_df(japan_airports_clean$ICAO, riem_measures,
@@ -251,7 +252,7 @@ summer_weather_riem_raw <-
          date_end = "2018-08-31")
 ```
 
-Great! Now we can do a bit of cleaning and also calculate the daily averages for a few temperature related measures as what `riem_measures()` gives us is a bit too granular for our purposes. Finally, combine it back with the airport metadata.
+Great! Now we can do a bit of cleaning and also calculate the daily averages for a few temperature related measures as what `riem_measures()` gives us is a bit too granular for our purposes. Then, combine it back with the airport metadata.
 
 ```{r join riem with station}
 # calculate daily averages 
@@ -269,7 +270,7 @@ sum_air <- summer_weather_riem_raw %>%
   glimpse()
 ```
 
-With that done we can play around with the data a bit like finding the dew point, humidity, or changing from __Fahrenheit__ to __Celsius__ with the help of the `weathermetrics` package.
+With that done we can play around with the data a bit like changing from __Fahrenheit__ to __Celsius__ with the help of the `weathermetrics` package.
 
 ```{r weathermetrics}
 library(weathermetrics)
@@ -281,7 +282,7 @@ sum_air %>%
   glimpse()
 ```
 
-You can also calculate the __humidex__ (index of comfort combining temperature and humidity) with the `comf` package:
+You can also calculate the [humidex](https://en.wikipedia.org/wiki/Humidex) (index of comfort combining temperature and humidity) with the `comf` package:
 
 ```{r humidex}
 library(comf)
@@ -294,16 +295,13 @@ sum_air %>%
   slice(1:5)
 ```
 
-
-I took out a lot of the other weather variables like wind direction, wind speed, visibility, pressure altimeter, etc. that you can get from `RIEM` as I was only interested in the temperature stuff but you can see what each of them are from the [documentation](http://ropensci.github.io/riem/reference/riem_measures.html) or you can go directly to [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/ASOS/) website to find more details.
+I took out a lot of the other weather variables like wind direction, wind speed, visibility, pressure altimeter, etc. that you can get from `RIEM` as I was only interested in the temperature stuff but you can see what each of the variables are from the [documentation](http://ropensci.github.io/riem/reference/riem_measures.html) or you can go directly to the [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/ASOS/) website to find more details!
 
 ### JMAStats 
 
-In the visualizations I made in the first section, I used data from the JMA but it was either indirectly or through web scraping. So now I'll show you a way to get data directly using R with the `JMAStats` package! This useful package is authored by [Shinya Uryu](https://twitter.com/u_ribo) and it is still in the early stages of its development. Through a variety of presentations and gists (Ex. [1](https://gist.github.com/uribo/3df84211cc48b50ec11655e17ea27ee1), [2](https://github.com/uribo/talk_180715-tokyor71)) he has demonstrated some of the cool things you can do with it, even if you can't read Japanese I suggest you check it out for the visualizations!
+In the visualizations I made in the first section, I used data from the JMA but it was either indirectly or through web scraping. So now I'll show you a way to get data directly using R with the [JMAStats](https://gitlab.com/uribo/jmastats) package! This useful package is authored by [Shinya Uryu](https://twitter.com/u_ribo) and it is still in the early stages of its development. Through a variety of presentations and gists (Ex. [1](https://gist.github.com/uribo/3df84211cc48b50ec11655e17ea27ee1), [2](https://github.com/uribo/talk_180715-tokyor71)) he has demonstrated some of the cool things you can do with it, even if you can't read Japanese I suggest you check it out for the visualizations!
 
-First, let's create a small map of the JMA weather stations in Tokyo to give us a little context about the Japan Meteorolgical Agency and its weather stations.
-
-We can use the weather stations metadata from the `JMAStats` package and filter for stations located in Tokyo Prefecture to create our map.
+First, let's create a small map of the JMA weather stations in Tokyo to give us a little context about the Japan Meteorolgical Agency and its weather stations. We can use the weather stations metadata from the `JMAStats` package and filter for stations located in Tokyo Prefecture to create our map.
 
 The __Automated Meteorological Data Acquisition System__ (AMeDAS) is the 1,300 station network spread throughout Japan that uses automatic observation equipment to measure and record data such as the weather, wind direction/speed, precipitation, humidity and more. There are both manned and unmanned stations which send data back to the JMA Headquarters at 10 second or 10 minutes intervals depending on the type of data.
 
@@ -311,7 +309,7 @@ Here's a picture of one of these AMeDAS installations:
 
 ![](https://i.imgur.com/SagQehX.jpg)
 
-We'll also include the regional weather headquarters in Tokyo for this map (this station doesn't use AMeDAS).
+I'll also include the regional weather headquarters in Tokyo for this map (this station doesn't use AMeDAS). Below I pull out the latitude and longitude coordinates from the `geometry` column of the stations data set.
 
 ```{r tokyo weather stations df}
 tky_stations_raw <- jmastats::stations %>% 
@@ -325,7 +323,6 @@ tky_stations <- tky_stations_raw %>%
     coord_y = map_dbl(coords, 2)) %>% 
   select(-centroid, - coords)
 ```
-
 
 Using the `jpn_pref()` function from the `jpndistrict` package we specify the spatial polygons data we want to grab. In the `pref_code` argument we pass **13** as that's the [prefectural code](https://en.wikipedia.org/wiki/Prefectures_of_Japan) for the Tokyo Prefecture. Then I try to filter out the Ogasawara Islands as they are way off the coast of Japan. There's still some other islands but since they are part of districts on the mainland you can't just filter them out like we did with the Ogasawara Islands. Therefore I'm going to use the "hacksaw" approach and just cut them out from our view by specifying the x and y limits (the coordinates).
 
@@ -345,6 +342,7 @@ sf_pref13 <- jpn_pref(pref_code = 13) %>%
     magrittr::set_names(c("geometry", "jis_code", "prefecture")) %>% 
     st_as_sf()
 
+# Insert fontawesome icon into a 'label' column
 tky_stations <- tky_stations %>% 
   filter(coord_y > 35) %>% 
   mutate(label = fontawesome(c("fa-university")))
@@ -362,10 +360,12 @@ sf_pref13 %>%
              aes(x = coord_x, y = coord_y,
                  label = station_name),
              size = 3, nudge_y = -0.025) +
+  labs(title = "Tokyo JMA Weather Stations",
+       subtitle = "All Types",
+       caption = "Source: Japan Meteorological Agency") +
   theme_minimal() +
   theme(axis.title = element_blank(),
         axis.ticks = element_blank())
-
 ```
 
 You can see that the weather stations in Tokyo Prefecture are pretty well spread throughout the area. I'll go over the differences between the station types a bit later.
@@ -419,6 +419,7 @@ block_no <- j_station_df %>% select(block_no) %>% as_vector()
 # create a dataframe consisting of every combination of month and station
 df <- crossing(block_no, month) 
 
+# jma_collect()
 j_sum_weather_raw <- map2(.x = df$block_no, .y = df$month, 
         ~ jma_collect(item = "daily", block_no = .x, year = 2018, month = .y) %>% 
           mutate(block = .x))
@@ -450,7 +451,7 @@ So now we have a large data frame of weather data for one station per prefecture
 
 We can also add in spatial polygons data (from the [jpndistrict](https://github.com/uribo/jpndistrict) package) to create maps:
 
-```{r combine with spatial}
+```{r combine with spatial, warning=FALSE}
 # Japan spatial polygons from jpndistrict package
 sf_ja <- 1:47 %>% # Prefectural codes 1-47
     map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
@@ -458,6 +459,7 @@ sf_ja <- 1:47 %>% # Prefectural codes 1-47
     st_simplify(dTolerance = 0.01) %>% 
   mutate(pref_code = as.numeric(pref_code))
 
+# combine temp with spatial df
 j_temp_map_stations_df <- j_temp_stations_df %>% 
   mutate(pref_code = as.numeric(pref_code)) %>% 
   left_join(sf_ja, by = c("pref_code", "prefecture"))
@@ -480,13 +482,13 @@ For the purposes of this blog post I only wanted temperature data, which is some
 
 To conclude, there's definitely a lot more steps compared to the `RIEM` package but on the other hand we are not limited to taking data only from weather stations at airports!
 
-## Plotting weather data
+## Plotting Weather Data
 
 Now that we've got our data, let's make some plots! How about we take a look at the prefectures with the highest average temperatures throughout the summer months?
 
-If we use `geom_line()` to check out how each of the prefectures stack up, it's really hard to interpret as there are so many lines! We could just `filter()` for the top 5 or use `top_n()` but then we lose context as we can't see those lines in relation to the other prefectures. The solution here is the [gghighlight](https://github.com/yutannihilation/gghighlight) package made by [Hiroaki Yutani](https://twitter.com/yutannihilat_en).
+If we use `geom_line()` to check out how each of the prefectures stack up, it's really hard to interpret as there are so many lines! We could just `filter()` for the top 5 or use `top_n()` but then we lose context as we can't see those lines in relation to all the other prefectures. The solution here is the [gghighlight](https://github.com/yutannihilation/gghighlight) package made by [Hiroaki Yutani](https://twitter.com/yutannihilat_en).
 
-With the `gghighlight()` function we can specify the filtering variable as the __average of the average temperatures__ with `mean(temperature_average)`. Then with the `max_highlight` argument we can define the maximum number of the top prefectures we want highlighted, we'll go with the top 5.
+With the `gghighlight()` function we can specify the filtering variable as the __average of the average temperatures__ with `mean(temperature_average)`. Then with the `max_highlight` argument we can define the maximum number of the top prefectures we want highlighted, I'll go with the top 5 here.
 
 ```{r typical bar plot}
 cols <- c("Okinawa" = "#e41a1c", "Saga" = "#377eb8", 
@@ -513,6 +515,7 @@ j_temp_colors %>%
                      expand = c(0, 0)) +
   labs(title = "Top 5 Prefectures with Highest Average Temperature", 
        subtitle = "Averaged over the Summer Months (June 1st - August 31st)",
+       caption = "Source: Japan Meteorological Agency",
        y = "Average Temperature (°C)") +
   theme_minimal() +
   theme(axis.title.x = element_blank(),
@@ -521,7 +524,7 @@ j_temp_colors %>%
 
 No surprises here with the top 5 consisting of prefectures in the south except for Gifu! With this plot you can clearly see how Okinawa is much hotter compared to the rest of Japan in June and then in July you see the other prefectures "catching up" in a sense. Okinawa doesn't have the highest daily average temperatures but compared to other prefectures it is consistently hot and this is why it's in first place.
 
-We can also compare prefectures in each region against each other. Let's nest prefectures by their regions using `group_by()` and `nest()`. Then, we can make a plot for each of these nested regions comparing the prefecture's average temperature to the region's average temperature on... let's just say the day of the summer solstice, this year it's on the 21st of June!
+We can also compare prefectures in each region against each other. Let's nest prefectures by their regions using `group_by()` and `nest()`. Then, we can make a plot for each of these nested regions comparing the prefecture's average temperature to the region's average temperature on... let's just say the day of the summer solstice, this year it was on the 21st of June!
 
 ```{r lollipop plot by region avg create}
 region_plots <- j_temp_colors %>% 
@@ -567,11 +570,7 @@ glimpse(region_plots)
 
 I could use `walk()` to show all the plots at once but it's a bit messy, so let's use the [patchwork](https://github.com/thomasp85/patchwork) package by [Thomas Pedersen](https://twitter.com/thomasp85) instead!
 
-```{r lolipop patchwork, width = 100, height = 200}
-library(patchwork)
-library(extrafont)
-loadfonts(device = "win")
-
+```{r lolipop patchwork, width = 150, height = 200, warning=FALSE}
 kanto <- region_plots$plot[[1]]
 kansai <- region_plots$plot[[2]]
 hokkaido <- region_plots$plot[[3]]
@@ -581,11 +580,12 @@ chugoku <- region_plots$plot[[6]]
 kyushu <- region_plots$plot[[7]]
 shikoku <- region_plots$plot[[8]]
 
+library(patchwork)
+# group them up, going top = north, bottom = south
 (hokkaido + tohoku) / (chubu + kanto) / (kansai + chugoku) / (shikoku + kyushu) +
   plot_annotation(title = "Regional Temperatures on the Summer Solstice (June 21st, 2018)",
-                  subtitle = "Horizontal line: Average Regional Temperature")
-
-# ggsave(filename = "region_plot.png", height = 12, width = 15)
+                  subtitle = "Horizontal line: Average Regional Temperature",
+                  caption = "Source: Japan Meteorological Agency")
 ```
 
 These prefectures are divided into the official regional divisions of Japan. Although they are not official administritative units in any shape or form, things like weather reports use these regions to report the weather. We can see that with Okinawa being part of the Kyushu region it drastically skews the average while Hokkaido is the only prefecture in its region. For a deeper analysis it might be prudent to divide the prefectures a bit differently!
@@ -655,9 +655,11 @@ jp_prefs_grid1 <- jp_prefs_grid1 %>%
   arrange(code_pref_jis) %>% 
   mutate(prefecture_en = pref_names)
 
+# colors by region
 cols <- c("Kyushu" = "#e41a1c", "Shikoku" = "#377eb8", "Chugoku" = "#4daf4a", "Chubu" = "#984ea3",
           "Kansai" = "#ff7f00", "Kanto" = "#ffff33", "Tohoku" = "#a65628", "Hokkaido" = "#f781bf")
 
+# plot!
 j_temp_colors %>% 
   ggplot(aes(date, temperature_average)) +
   geom_line(aes(color = region_en), size = 0.75, show.legend = FALSE) +
@@ -665,7 +667,8 @@ j_temp_colors %>%
   scale_y_continuous(breaks = c(10, 20, 30)) +
   gghighlight(use_direct_label = FALSE) +
   labs(title = glue::glue("Average Daily Temperature (°C) in Japan"),
-       subtitle = "June ~ August 2018, Colored by Region") +
+       subtitle = "June ~ August 2018, Colored by Region",
+       caption = "Source: Japan Meteorological Agency") +
   theme_minimal() +
   theme(text = element_text(family = "Roboto Condensed"),
         title = element_text(size = 18), 
@@ -686,7 +689,7 @@ With the facet labels clearly showing the prefecture names we can now place both
 
 The beginning of this blog post showcased some of my attempts in R at recreating some cool weather visualizations I saw on the internet. In the following sections I went through two different ways to gather Japanese weather data from the `RIEM` and `JMAStats` packages. In the last section I created some exploratory graphics with the gathered data to raise questions about the data and different ways to present weather data. 
 
-With Autumn now settling in and the chances of rain increasing, I'll end this blog post with a picture of a _teru-teru-bouzu_. These are handmade dolls made of white paper/cloth (usually tissue paper) which are basically talismans to prevent rain and to wish for good weather in Japan. 
+With Autumn now settling in and the rainy days to come, I'll end this blog post with a picture of a _teru-teru-bouzu_. These are handmade dolls made of white paper/cloth (usually tissue paper) which are basically talismans to prevent rain and to wish for good weather in Japan. 
 
 Thanks for reading and see you next time!
 

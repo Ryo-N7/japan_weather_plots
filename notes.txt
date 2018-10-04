@@ -1,0 +1,54 @@
+- https://www.nytimes.com/interactive/2018/08/30/climate/how-much-hotter-is-your-hometown.html
+
+- Days @ or above 32 degrees Celsius per year
+Tokyo (1993): 27 days
+Tokyo (2018): 30 days 
+Tokyo (2073): 43 days (39-58)
+
+
+
+The past few summers have been scorching hot raising several issues throughout Japanese society, foremost being how we deal with the heat for the Tokyo Olympics in 2020. 
+
+- Tokyo Olympics 2020 >>> Marathon starting times fiasco (really? are we really going to 
+do day light savings time for 2 months??? idiots.)
+- select a time that's early but still advantageous for japanese runners
+- 
+
+
+
+on the other hand...
+
+# Precipitation! Rain + Flooding in Western Japan!
+all the typhoons of late have probably been making more headlines in foreign media.
+
+i meant to have this blog post done by end of august but work got in the way, then i went to EARL London (R Conference) and HELLOO OCTOBER!
+
+
+
+Now the weather is kinda starting to cool down and there's more concern over the typhoons and torrential rains hitting all regions of Japan. As both JMA and ASOS stations also collect precipitation data maybe my next post will be on the rain! Other ideas could be weather forecasting models or taking a look at how rainfall affects water basins in Japan with the `rayshader` package? There's plenty of cool applications and visualizations you can do with this data so I encourage you to try it out! 
+
+
+
+
+
+# save RDS
+
+#saveRDS(summer_weather_riem_raw, file = "data/summer_weather_riem_raw.RDS")
+
+#saveRDS(japan_stations_coords, file = "data/japan_stations_coords.RDS")
+
+#saveRDS(j_sum_weather_raw, file = "data/j_all_weather_raw.RDS")
+
+#saveRDS(j_all_weather_df, file = "data/j_all_weather_df.RDS")
+
+#saveRDS(j_temp_stations_df, "data/j_temp_stations_df.RDS")
+
+#saveRDS(j_temp_map_stations_df, "j_temp_map_stations_df.RDS")
+
+
+##
+
+#filter(date %in% as.Date(c("2018-07-19", "2018-07-20", "2018-07-21", "2018-07-22"))) %>% 
+
+
+# ggsave(filename = "region_plot.png", height = 12, width = 15)
