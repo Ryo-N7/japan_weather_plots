@@ -88,7 +88,7 @@ glimpse(tokyo_weather_df)
 
 Great! Now we have the data we need for plotting!
 
-So, the point of this heat map visualization is to see the changes in temperature across time. We need to choose the right kind of color palette to emphasize the point we are trying to convey with this visualization. A great resource that I like to use is [colorbrewer2.org](colorbrewer2.org) where you can choose from a variety of classes and scales to fit your palette needs. The colors I chose came from the 8-class diverging palette, the website provides you with the __Hex Code__ you need to pass into the appropriate `scale_*()` function. I also specify the breaks and labels for the color scale.
+So, the point of this heat map visualization is to see the changes in temperature across time. We need to choose the right kind of color palette to emphasize the point we are trying to convey with this visualization. A great resource that I like to use is [colorbrewer2.org](http://colorbrewer2.org/) where you can choose from a variety of classes and scales to fit your palette needs. The colors I chose came from the 8-class diverging palette, the website provides you with the __Hex Code__ you need to pass into the appropriate `scale_*()` function. I also specify the breaks and labels for the color scale.
 
 ```{r tokyo summer colors}
 # colorbrewer2.org: diverging 8-class palette
