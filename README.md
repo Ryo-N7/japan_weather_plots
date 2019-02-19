@@ -10,3 +10,9 @@
 
 NOTES:
 - the fontawesome icons (in the Tokyo weather stations map) screws up loading other fonts (extrafont package fonts) so you need to refresh your session before/after if you want to run the other plots after that one.
+
+![](https://i.imgur.com/v4DTyOw.png)
+
+![](https://i.imgur.com/MFnT8xO.png)
+
+![](https://i.imgur.com/WBspwRp.png)
