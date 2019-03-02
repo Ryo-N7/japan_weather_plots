@@ -1,0 +1,40 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "November 17, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("../scripts/source_encoding_932.r")
+```
+
+## First snowfall in Hokkaido coming later in the year??
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(jpndistrict)
+library(jmastats)
+```
+
+```{r}
+stations %>% filter(station_type == "雪") %>% View()
+stations %>% filter(pref_code == "01", station_type %in% c("官", "雪")) %>% View()
+
+
+
+# 14163
+
+
+month <- 11
+year <- 1960
+block_no <- 47412
+
+sapporo_data <- jma_collect(item = "daily", block_no = block_no, year = year, month = month) 
+```
+
+- find first non-zero value in snowfall data column >>> record date
+- do for each year
+- use `first()` to grab first date in sequence?

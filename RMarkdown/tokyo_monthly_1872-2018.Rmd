@@ -1,0 +1,113 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "March 2, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# pkgs
+
+```{r packages, warning=FALSE, message=FALSE}
+pacman::p_load(tidyverse, lubridate, geofacet, gghighlight, 
+               sf, extrafont, glue, RColorBrewer, emo)
+
+# font packages
+loadfonts(device = "win")
+```
+
+
+# clean
+
+
+```{r}
+# download from JMA website: http://www.data.jma.go.jp/gmd/risk/obsdl/index.php
+# choose TokyoPrefecture/Tokyo Station, Monthly data, Jan. 1872 to Dec. 2018
+tky_monthly_raw <- read_csv("../data/tokyo_monthly_1872-2018.csv", skip = 53, 
+                            col_names = c("date", "avg_temp", "col1", "col2")) %>% 
+  select(-col1, -col2)
+
+tky_monthly_clean <- tky_monthly_raw %>% 
+  separate("date", into = c("year", "month"), sep = "/") %>% 
+  mutate_if(is.character, as.numeric) %>% 
+  filter(year %in% c(1876:1886, 2008:2018)) %>% 
+  mutate(split_years = case_when(
+    year %in% c(1876:1886) ~ "early",
+    year %in% c(2008:2018) ~ "late"
+  )) %>% 
+  group_by(month, split_years) %>% 
+  summarize(avg_month = mean(avg_temp) %>% round(1)) %>% 
+  spread(key = split_years, avg_month) %>% 
+  mutate(diff = late - early,
+         diff = glue("+{diff}°C"))
+```
+
+# plot
+
+```{r fig.height=5, fig.width=9}
+# colors from dichromat package: BluetoOrange.12
+
+tky_monthly_clean %>% 
+  ggplot(aes(month, early)) +
+  geom_segment(aes(xend = month, yend = late),
+               arrow = arrow(length = unit(0.125, "inches")),
+               size = 1.5,
+               lineend = "round", linejoin = "mitre") +
+  geom_text(aes(label = diff, y = late, family = "Roboto Condensed"), 
+            size = 4, nudge_y = 1.5) +
+  scale_x_continuous(limits = c(0.5, 12.7), 
+                     breaks = seq(from = 1, to = 12, by = 1),
+                     labels = month.abb,
+                     expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, 30), position = "right",
+                     breaks = seq(0, 30, by = 5),
+                     labels = c("0°C", "5°C", "10°C", "15°C", "20°C", "25°C", "30°C"),
+                     expand = c(0, 0)) +
+  labs(title = "Tokyo Is Warming Up All Year Round, Especially In The Winter!",
+       subtitle = "Average of monthly temperatures between 1876-1886 and 2008-2018.",
+       x = "Month", 
+       y = "",
+       caption = glue("
+                      @R_by_Ryo
+                      Source: Japan Meteorological Agency")) +
+  annotate(geom = "segment", x = 3.15, xend = 3.6, y = 6.7, yend = 6.7) +
+  annotate(geom = "segment", x = 3.15, xend = 3.6, y = 10, yend = 10) +
+  annotate(geom = "text", family = "Roboto Condensed",
+           x = 3.7, y = 6.7, size = 4,
+           label = "1876-1886", hjust = 0) +
+  annotate(geom = "text", family = "Roboto Condensed",
+           x = 3.7, y = 10, size = 4,
+           label = "2008-2018", hjust = 0) +
+  annotate(geom = "rect", 
+           xmin = 12.45, xmax = 12.7, ymin = 0, ymax = 5,
+           fill = "#002BFF") +
+  annotate(geom = "rect", 
+           xmin = 12.45, xmax = 12.7, ymin = 5, ymax = 10,
+           fill = "#66CCFF") +
+  annotate(geom = "rect", 
+           xmin = 12.45, xmax = 12.7, ymin = 10, ymax = 15,
+           fill = "#FFFFCC") +
+  annotate(geom = "rect", 
+           xmin = 12.45, xmax = 12.7, ymin = 15, ymax = 20,
+           fill = "#FFCC66") +
+  annotate(geom = "rect", 
+           xmin = 12.45, xmax = 12.7, ymin = 20, ymax = 25,
+           fill = "#FF661A") +
+  annotate(geom = "rect", 
+           xmin = 12.45, xmax = 12.7, ymin = 25, ymax = 30,
+           fill = "#A60021") +
+  theme_minimal() +
+  theme(text = element_text(family = "Roboto Condensed"),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(size = 18),
+        plot.subtitle = element_text(size = 14),
+        plot.caption = element_text(hjust = 0),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14))
+
+cowplot::ggsave(filename = "japan_1876vs2018.png", height = 5, width = 9, dpi = 144)
+```
+

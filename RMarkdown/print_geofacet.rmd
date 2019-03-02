@@ -1,0 +1,96 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "October 23, 2018"
+output: 
+  md_document:
+    variant: markdown_github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r packages, warning=FALSE, message=FALSE}
+library(jpndistrict) # install GitHub version to get English names in jpnprefs
+library(sf)          # spatial polygons
+library(ggplot2)     # plotting essentials
+library(dplyr)       # data wrangling
+library(tidyr)       # more data wrangling
+library(purrr)       # even more data wrangling
+library(lubridate)   # date wrangling
+library(rvest)       # webscraping
+library(polite)      # responsible webscraping
+library(stringr)     # string wrangling
+library(riem)        # airport weather station data
+library(jmastats)    # Japan Meteorological Agency data
+library(ggrepel)     # labels
+library(gganimate)   # animations
+library(geofacet)    # geographical facetting
+library(gghighlight) # highlight stuff
+
+# font packages
+library(extrafont)
+loadfonts(device = "win")
+```
+
+```{r geofacet plot, fig.height=10, fig.width=12}
+j_temp_stations_df <- readRDS(file = "../data/j_temp_stations_df.RDS")
+j_temp_map_stations_df <- readRDS(file = "../data/j_temp_stations_df.RDS")
+
+j_temp_colors <- j_temp_stations_df %>% 
+    # remove the prefecture suffixes from the english names
+    mutate(prefecture_en = str_replace(prefecture_en, "\\-.*", ""))
+
+# Fix issue of grid dataframe not recognizing the facetted variable name:
+pref_names <- j_temp_map_stations_df %>% 
+  mutate(prefecture_en = str_replace(prefecture_en, "\\-.*", "")) %>% 
+  distinct(pref_code, prefecture_en) %>% 
+  arrange(pref_code) %>% 
+  magrittr::use_series(prefecture_en)
+
+jp_prefs_grid1 <- jp_prefs_grid1 %>% 
+  arrange(code_pref_jis) %>% 
+  # fix Tochigi, Gunma & Ibaraki positioning:
+  mutate(col = as.numeric(case_when( 
+  code == "9" ~ "13",
+  code == "8" ~ "14",
+  code == "10" ~ "12",
+  TRUE ~ as.character(col))),
+  row = as.numeric(case_when( 
+    code == "9" ~ "5",
+    code == "8" ~ "6",
+    TRUE ~ as.character(row)))) %>% 
+  mutate(prefecture_en = pref_names)
+
+# colors by region
+cols <- c("Kyushu" = "#e41a1c", "Shikoku" = "#377eb8", "Chugoku" = "#4daf4a", "Chubu" = "#984ea3",
+          "Kansai" = "#ff7f00", "Kanto" = "#ffff33", "Tohoku" = "#a65628", "Hokkaido" = "#f781bf")
+
+# plot!
+j_temp_colors %>% 
+  ggplot(aes(date, temperature_average)) +
+  geom_line(aes(color = region_en), size = 0.75, show.legend = FALSE) +
+  scale_color_manual(values = cols) +
+  scale_y_continuous(breaks = c(10, 20, 30)) +
+  gghighlight(use_direct_label = FALSE) +
+  labs(title = glue::glue("Average Daily Temperature (°C) in Japan"),
+       subtitle = "June ~ August 2018, Colored by Region",
+       caption = "Source: Japan Meteorological Agency") +
+  theme_minimal() +
+  theme(text = element_text(family = "Roboto Condensed"),
+        title = element_text(size = 18), 
+        axis.title = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        strip.background = element_rect(color = "black", linetype = "solid"),
+        strip.text.x = element_text(size = 10.5),
+        axis.text = element_text(size = 8)) +
+  facet_geo(~ prefecture_en, 
+            grid = "jp_prefs_grid1")
+```

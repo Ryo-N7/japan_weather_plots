@@ -336,18 +336,30 @@ sf_pref13 <- jpn_pref(pref_code = 13) %>%
     st_simplify(dTolerance = 0.001) %>% 
     mutate(city_code = as.numeric(city_code)) %>% 
     filter(city_code != 13421) %>%  # filter out the Ogasawara Islands (waaayy off the coast)
-    st_union() %>% 
-    as.data.frame() %>% 
-    mutate(jis_code = "13", prefecture = "Tokyo") %>% 
-    magrittr::set_names(c("geometry", "jis_code", "prefecture")) %>% 
-    st_as_sf()
+    st_union() 
 
+# fix "holes" from st_union(): https://uribo.hatenablog.com/entry/2018/08/14/000541
+sf_pref13_FIX <- sf_pref13 %>% 
+  st_cast("POLYGON") %>% 
+  map(~ .x[1]) %>% 
+  st_multipolygon() %>% 
+  st_sfc(crs = 4326) %>% 
+  as.data.frame() %>% 
+  mutate(jis_code = "13", prefecture = "Tokyo") %>% 
+  magrittr::set_names(c("geometry", "jis_code", "prefecture")) %>% 
+  st_as_sf()
+```
+
+
+
+
+```{r plot tokyo stations map}
 # Insert fontawesome icon into a 'label' column
 tky_stations <- tky_stations %>% 
   filter(coord_y > 35) %>% 
   mutate(label = fontawesome(c("fa-university")))
 
-sf_pref13 %>% 
+sf_pref13_FIX %>% 
   ggplot() +
   geom_sf(fill = "white") +
   coord_sf(xlim = c(138.9, 139.95),
@@ -653,6 +665,16 @@ pref_names <- j_temp_map_stations_df %>%
 
 jp_prefs_grid1 <- jp_prefs_grid1 %>% 
   arrange(code_pref_jis) %>% 
+  # fix Tochigi, Gunma & Ibaraki positioning:
+  mutate(col = as.numeric(case_when( 
+  code == "9" ~ "13",
+  code == "8" ~ "14",
+  code == "10" ~ "12",
+  TRUE ~ as.character(col))),
+  row = as.numeric(case_when( 
+    code == "9" ~ "5",
+    code == "8" ~ "6",
+    TRUE ~ as.character(row)))) %>% 
   mutate(prefecture_en = pref_names)
 
 # colors by region
