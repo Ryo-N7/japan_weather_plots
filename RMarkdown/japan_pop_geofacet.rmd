@@ -1,0 +1,140 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "December 22, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# packages
+
+```{r message=FALSE, warning=FALSE}
+pacman::p_load(tidyverse, scales, lubridate, ggrepel, sf,
+               glue, extrafont, readxl, jpndistrict, geofacet, cowplot,
+               gghighlight, magick)
+loadfonts(device = "win", quiet = TRUE)
+```
+
+## load and calc
+
+```{r warning=FALSE, message=FALSE}
+jpn_pop_raw <- read_xls(glue("{here::here()}/data/05k5-5.xls"), skip = 9,
+                        col_types = c("skip", "text", "skip", "text",
+                                      "numeric", "numeric", "numeric", "numeric",
+                                      "numeric", "numeric", "numeric", "numeric",
+                                      "numeric", "numeric", "numeric", "numeric",
+                                      "numeric", "numeric", "numeric", "numeric"))
+
+# pop values in 1000s!!
+jpn_pop_clean <- jpn_pop_raw %>% 
+  slice(-49:-55) %>% 
+  set_names("jis_code", "name", seq(2000, 2015, by = 1)) %>% 
+  mutate_if(is.numeric, funs(. * 1000))
+
+## final df
+jpn_pop_df <- jpn_pop_clean %>% 
+  gather(key = "year", value = "population", 
+         -jis_code, -name) %>% 
+  #filter(jis_code == "23") %>% 
+  group_by(jis_code) %>% 
+  arrange(year, .by_group = TRUE) %>% 
+  mutate(pct_change = (population/lag(population) - 1) * 100,
+         name = name %>% str_replace_all("-.*", ""),
+         name = case_when(
+           name == "Gumma" ~ "Gunma",
+           TRUE ~ name
+         )) %>% 
+  rename(code_pref_jis = jis_code)
+```
+
+## new grid
+
+```{r}
+p_prefs_grid1 <- geofacet::jp_prefs_grid1 %>% 
+  arrange(code_pref_jis) %>% 
+  # fix Tochigi, Gunma & Ibaraki positioning:
+  mutate(col = as.integer(case_when( 
+  code == "9" ~ "13",
+  code == "8" ~ "14",
+  code == "10" ~ "12",
+  TRUE ~ as.character(col))),
+  row = as.integer(case_when( 
+    code == "9" ~ "5",
+    code == "8" ~ "6",
+    TRUE ~ as.character(row))))
+
+# filter for north-east coastal
+j_pop <- jpn_pop_df %>% 
+  filter(!is.na(code_pref_jis)) %>%
+  mutate(affected = case_when(
+    name %in% c("Miyagi", "Fukushima", "Chiba", "Iwate", "Ibaraki") ~ "tohoku",
+    TRUE ~ "other"
+  ))
+```
+
+## Percentage change
+
+- Chiba prefecture decline less due to deaths but due to soil liquefaction of reclaimed land areas leading to large amounts of housing damage
+
+```{r fig.width=20, fig.height = 18}
+j_pop %>% 
+  ggplot(aes(x = as.numeric(year), y = pct_change, group = name)) +
+  geom_line(color = "black", size = 2) +
+  geom_line(data = j_pop %>% filter(affected == "tohoku"),
+            color = "red", size = 2) +
+  geom_hline(yintercept = 0, color = "grey20", size = 0.5) +
+  geom_vline(data = j_pop %>% filter(affected == "tohoku"),
+             aes(xintercept = 2011), color = "grey20", size = 0.5) +
+  labs(caption = glue("
+                      Data: e-Stat.go.jp (第５表   都  道  府  県  別  人  口 (各年10月1日現在)－ 総人口，日本人（平成12年～27年）)
+                      Created by: @R_by_Ryo")) +
+  theme_minimal() +
+  theme(text = element_text(family = "Roboto Condensed"),
+        plot.caption = element_text(size = 25, hjust = 0), 
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        panel.grid = element_blank(),
+        strip.text = element_text(size = 15),
+        strip.background = element_rect(color = "black", linetype = "solid")) +
+  facet_geo(~ name, grid = p_prefs_grid1) -> jp_pop_geofacet
+```
+
+## magick
+
+```{r}
+ggsave(jp_pop_geofacet, filename = glue("{here::here()}/output/jp_pop_geo.png"), 
+       width = 20, height = 18, dpi = 300)
+plot <- image_read(glue("{here::here()}/output/jp_pop_geo.png"))
+
+a <- image_blank(width = 800, height = 80, color = "white")
+# combine with logo image and shift logo to the right
+
+# add in the title text
+logo_title <- a %>% 
+  image_annotate(text = "Percent Change in Population, Japan (2000-2015)",
+                 color = "black", size = 30, font = "Roboto Condensed",
+                 location = "+63+20", gravity = "northwest") 
+
+b <- image_blank(width = 800, height = 300, color = "white")
+logo_header <- b %>% 
+  image_annotate(text = glue("
+                       Grey Horizontal Bar = 0% Change. Grey Vertical Bar = Year 2011.
+
+                       In a time period where most prefectures suffered population decline
+                       and migration to Tokyo (and its neighboring prefectures) the
+                       problems for the prefectures along the north-east coast
+                       (Iwate, Miyagi, Fukushima, Ibaraki, Chiba) were exacerbated by
+                       the 2011 Tohoku Earthquake.
+                       "),
+                 color = "black", size = 18, font = "Roboto Condensed",
+                 location = "+63+20", gravity = "northwest")
+
+logos_image <- image_append(image_scale(c(logo_title, logo_header), "800"), stack = TRUE)
+
+jpop_fin <- image_composite(image_scale(plot, "x1000"), logos_image)
+
+image_write(jpop_fin, path = glue("{here::here()}/output/jp_pop_plot.png"), format = "png")
+```
